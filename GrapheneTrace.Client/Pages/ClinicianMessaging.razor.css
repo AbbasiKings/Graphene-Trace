@@ -1,0 +1,56 @@
+.messaging-layout {
+    min-height: calc(100vh - 7rem);
+}
+
+.thread-list {
+    max-height: 620px;
+    overflow-y: auto;
+}
+
+.thread-list .mud-list-item.active-thread {
+    background-color: rgba(25, 118, 210, 0.12);
+}
+
+.conversation {
+    min-height: 620px;
+}
+
+.conversation-body {
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 24px;
+    background: linear-gradient(180deg, rgba(25, 118, 210, 0.08) 0%, rgba(13, 71, 161, 0.1) 100%);
+}
+
+.message {
+    display: flex;
+    margin-bottom: 18px;
+}
+
+.message.from-patient {
+    justify-content: flex-start;
+}
+
+.message.from-clinician {
+    justify-content: flex-end;
+}
+
+.message-bubble {
+    max-width: 78%;
+    padding: 20px 24px;
+    border-radius: 18px;
+    box-shadow: inset 0 0 0 rgba(0, 0, 0, 0);
+}
+
+.message-bubble .mud-stack {
+    gap: 8px;
+}
+
+.message.from-patient .message-bubble {
+    background-color: rgba(255, 255, 255, 0.92);
+}
+
+.message.from-clinician .message-bubble {
+    background-color: rgba(25, 118, 210, 0.16);
+}
+

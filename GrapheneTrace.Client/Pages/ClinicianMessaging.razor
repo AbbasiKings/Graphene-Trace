@@ -1,0 +1,215 @@
+@page "/clinician/messaging"
+@using GrapheneTrace.Client.Models
+@using MudBlazor
+
+<PageTitle>Communication &amp; Feedback</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6 messaging-layout">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Communication Threads</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Continue in-line dialogues tied to flagged events and correlate responses to heat map timestamps.
+            </MudText>
+        </div>
+        <MudChip T="string" Color="Color.Info">Active threads: @Threads.Count</MudChip>
+    </MudStack>
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-0 elevation-2 thread-list">
+                <MudList T="ClinicianMessageThread" Dense="true">
+                    @foreach (var thread in Threads)
+                    {
+                        <MudListItem T="ClinicianMessageThread" Class="@GetThreadClass(thread.Id)" OnClick="@(() => SelectThread(thread.Id))">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="1" Class="w-100">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Class="fw-semibold">@thread.PatientName (@thread.PatientId)</MudText>
+                                    <MudText Typo="Typo.caption" Class="text-secondary">
+                                        Started @thread.StartedAt.ToString("g") · @thread.Summary
+                                    </MudText>
+                                </MudStack>
+                                <MudIcon Icon="@Icons.Material.Filled.ChatBubbleOutline" Color="Color.Info" />
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="8">
+            <MudPaper Class="pa-0 elevation-2 conversation">
+                <MudCard>
+                    <MudCardHeader>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudStack>
+                                <MudText Typo="Typo.h6">@SelectedThread.PatientName</MudText>
+                                <MudText Typo="Typo.caption" Class="text-secondary">Thread linked to frame @SelectedThread.StartedAt.ToString("HH:mm")</MudText>
+                            </MudStack>
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">Patient ID: @SelectedThread.PatientId</MudChip>
+                        </MudStack>
+                    </MudCardHeader>
+                    <MudCardContent Class="conversation-body">
+                        @foreach (var message in SelectedThread.Messages)
+                        {
+                            <div class="message @(message.IsClinician ? "from-clinician" : "from-patient")">
+                                <MudPaper Class="message-bubble" Elevation="2">
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.caption" Class="text-secondary">
+                                            @(message.IsClinician ? "Clinician" : "Patient") · @message.Timestamp.ToString("g")
+                                        </MudText>
+                                        <MudText Typo="Typo.body2">@message.Body</MudText>
+                                    </MudStack>
+                                </MudPaper>
+                            </div>
+                        }
+                    </MudCardContent>
+                    <MudDivider />
+                    <MudCardContent>
+                        <MudTextField @bind-Value="replyText"
+                                      Variant="Variant.Outlined"
+                                      Label="Write a reply"
+                                      Lines="3"
+                                      Placeholder="Summarise next steps, include references to heat map frames or metrics"
+                                      Immediate="true" />
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-3">
+                            <MudButton Variant="Variant.Text" Color="Color.Secondary" OnClick="ResetDraft">Discard</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send" Disabled="string.IsNullOrWhiteSpace(replyText)" OnClick="SendReply">
+                                Send Reply
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private readonly IReadOnlyList<ClinicianMessageThread> Threads = new[]
+    {
+        new ClinicianMessageThread(
+            Guid.NewGuid(),
+            "PT-71E66AB3",
+            "Amelia Preston",
+            DateTime.Now.AddHours(-3),
+            "Discomfort during evening walk",
+            new List<ClinicianMessage>
+            {
+                new ClinicianMessage("Patient", DateTime.Now.AddHours(-3), "I noticed sharp pressure on my heel during the evening walk around 7pm.", false),
+                new ClinicianMessage("Clinician", DateTime.Now.AddHours(-2.5), "Thanks Amelia, I see the spike around 19:06. Please reduce activity tonight and elevate foot.", true),
+                new ClinicianMessage("Patient", DateTime.Now.AddHours(-2), "Understood, I'll do that. Should I adjust the orthotic?", false)
+            }),
+        new ClinicianMessageThread(
+            Guid.NewGuid(),
+            "PT-5FF9AA21",
+            "Ella Martinez",
+            DateTime.Now.AddHours(-6),
+            "Follow-up on orthotic fit",
+            new List<ClinicianMessage>
+            {
+                new ClinicianMessage("Patient", DateTime.Now.AddHours(-6), "Fit feels tighter around forefoot this morning.", false),
+                new ClinicianMessage("Clinician", DateTime.Now.AddHours(-5.5), "I'll flag this for review. Please upload a photo if possible.", true)
+            }),
+        new ClinicianMessageThread(
+            Guid.NewGuid(),
+            "PT-5522201B",
+            "Logan Pierce",
+            DateTime.Now.AddHours(-9),
+            "Alert resolved confirmation",
+            new List<ClinicianMessage>
+            {
+                new ClinicianMessage("Clinician", DateTime.Now.AddHours(-9), "Pressure spike resolved in under 2 minutes. Logging as resolved.", true),
+                new ClinicianMessage("Patient", DateTime.Now.AddHours(-8.5), "Thanks, I didn't feel much discomfort this time.", false)
+            })
+    };
+
+    private Guid _selectedThreadId;
+    private string replyText = string.Empty;
+
+    private ClinicianMessageThread SelectedThread => Threads.First(t => t.Id == _selectedThreadId);
+
+    protected override void OnInitialized()
+    {
+        _selectedThreadId = Threads.First().Id;
+    }
+
+    private void SelectThread(Guid id)
+    {
+        _selectedThreadId = id;
+        replyText = string.Empty;
+    }
+
+    private string GetThreadClass(Guid id) => id == _selectedThreadId ? "active-thread" : string.Empty;
+
+    private void ResetDraft()
+    {
+        replyText = string.Empty;
+    }
+
+    private void SendReply()
+    {
+        if (string.IsNullOrWhiteSpace(replyText))
+        {
+            return;
+        }
+
+        // Demo: append to in-memory list
+        var thread = Threads.First(t => t.Id == _selectedThreadId);
+        (thread.Messages as List<ClinicianMessage>)?.Add(new ClinicianMessage("Clinician", DateTime.Now, replyText.Trim(), true));
+        replyText = string.Empty;
+    }
+}
+*** End Patch***
+*** Add File: GrapheneTrace.Client/Pages/ClinicianMessaging.razor.css
+.messaging-layout {
+    min-height: calc(100vh - 7rem);
+}
+
+.thread-list {
+    max-height: 620px;
+    overflow-y: auto;
+}
+
+.thread-list .mud-list-item.active-thread {
+    background-color: rgba(25, 118, 210, 0.12);
+}
+
+.conversation {
+    min-height: 620px;
+}
+
+.conversation-body {
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 24px;
+    background: linear-gradient(180deg, rgba(25, 118, 210, 0.08) 0%, rgba(13, 71, 161, 0.1) 100%);
+}
+
+.message {
+    display: flex;
+    margin-bottom: 16px;
+}
+
+.message.from-patient {
+    justify-content: flex-start;
+}
+
+.message.from-clinician {
+    justify-content: flex-end;
+}
+
+.message-bubble {
+    max-width: 80%;
+    padding: 14px 16px;
+    border-radius: 14px;
+}
+
+.message.from-patient .message-bubble {
+    background-color: rgba(255, 255, 255, 0.9);
+}
+
+.message.from-clinician .message-bubble {
+    background-color: rgba(25, 118, 210, 0.12);
+}
+*** End Patch
+

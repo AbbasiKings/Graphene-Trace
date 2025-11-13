@@ -1,0 +1,209 @@
+@page "/clinician/alerts"
+@using GrapheneTrace.Client.Models
+@using MudBlazor
+
+<PageTitle>Alerts &amp; Flagged Events</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Alerts &amp; Flagged Events</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Review automated alerts and patient comments, update statuses, and jump into detailed analysis.
+            </MudText>
+        </div>
+        <MudChip T="string" Color="Color.Warning">New: @NewEventsCount</MudChip>
+    </MudStack>
+
+    <MudPaper Class="pa-4 mb-4 elevation-1">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@string.Empty">All statuses</MudSelectItem>
+                    <MudSelectItem Value="@("New")">New</MudSelectItem>
+                    <MudSelectItem Value="@("In Review")">In Review</MudSelectItem>
+                    <MudSelectItem Value="@("Resolved")">Resolved</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" @bind-Value="_typeFilter" Label="Event type" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@string.Empty">All types</MudSelectItem>
+                    <MudSelectItem Value="@("High Pressure Alert")">High Pressure Alert</MudSelectItem>
+                    <MudSelectItem Value="@("Patient Comment")">Patient Comment</MudSelectItem>
+                    <MudSelectItem Value="@("Clinician Note")">Clinician Note</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" @bind-Value="_severityFilter" Label="Severity" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@string.Empty">Any severity</MudSelectItem>
+                    <MudSelectItem Value="@("Critical")">Critical</MudSelectItem>
+                    <MudSelectItem Value="@("High")">High</MudSelectItem>
+                    <MudSelectItem Value="@("Moderate")">Moderate</MudSelectItem>
+                    <MudSelectItem Value="@("Informational")">Informational</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_searchTerm"
+                              Variant="Variant.Outlined"
+                              Placeholder="Search patient or summary"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Outlined.Search"
+                              Immediate="true" />
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-0 elevation-2">
+        <MudTable T="ClinicianAlertEvent" Items="FilteredEvents" Hover="true" Dense="true">
+            <HeaderContent>
+                <MudTh>Timestamp</MudTh>
+                <MudTh>Patient</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Severity</MudTh>
+                <MudTh>Summary</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Timestamp">@context.Timestamp.ToString("g")</MudTd>
+                <MudTd DataLabel="Patient">
+                    <MudText Typo="Typo.body2" Class="fw-semibold">@context.PatientId</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">@context.PatientName</MudText>
+                </MudTd>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Size="Size.Small" Color="@EventTypeColor(context.EventType)">@context.EventType</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudSelect T="string"
+                               Dense="true"
+                               Value="@GetStatus(context.Id)"
+                               ValueChanged="status => UpdateEventStatus(context.Id, status)">
+                        <MudSelectItem Value="@("New")">New</MudSelectItem>
+                        <MudSelectItem Value="@("In Review")">In Review</MudSelectItem>
+                        <MudSelectItem Value="@("Resolved")">Resolved</MudSelectItem>
+                    </MudSelect>
+                </MudTd>
+                <MudTd DataLabel="Severity">
+                    <MudChip T="string" Size="Size.Small" Color="@SeverityColor(context.Severity)">@context.Severity</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Summary">
+                    <MudText Typo="Typo.body2">@context.Summary</MudText>
+                </MudTd>
+                <MudTd DataLabel="Actions" Class="text-end">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               Size="Size.Small"
+                               Href="/clinician/patient-analysis">
+                        View at timestamp
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private readonly IReadOnlyList<ClinicianAlertEvent> Events = new[]
+    {
+        new ClinicianAlertEvent(Guid.NewGuid(), "PT-71E66AB3", "Amelia Preston", DateTime.Now.AddMinutes(-10), "High Pressure Alert", "New", "Critical", "Heel hotspot sustained for 90 seconds"),
+        new ClinicianAlertEvent(Guid.NewGuid(), "PT-5FF9AA21", "Ella Martinez", DateTime.Now.AddMinutes(-24), "Patient Comment", "New", "Moderate", "Reported throbbing after evening walk"),
+        new ClinicianAlertEvent(Guid.NewGuid(), "PT-5522201B", "Logan Pierce", DateTime.Now.AddMinutes(-41), "High Pressure Alert", "In Review", "High", "Forefoot pressure spike resolved automatically"),
+        new ClinicianAlertEvent(Guid.NewGuid(), "PT-19AA72F1", "Noah Sullivan", DateTime.Now.AddHours(-1), "Clinician Note", "Resolved", "Informational", "Reinforced offloading plan and exercises"),
+        new ClinicianAlertEvent(Guid.NewGuid(), "PT-90CC1144", "Harper Diaz", DateTime.Now.AddHours(-2), "Patient Comment", "In Review", "Moderate", "Requested guidance on orthotic adjustments"),
+        new ClinicianAlertEvent(Guid.NewGuid(), "PT-43DD1982", "Maya Chen", DateTime.Now.AddHours(-3), "High Pressure Alert", "Resolved", "High", "Early morning spike flagged and acknowledged"),
+        new ClinicianAlertEvent(Guid.NewGuid(), "PT-67AB3210", "Jonah Patel", DateTime.Now.AddHours(-4), "Patient Comment", "Resolved", "Informational", "Confirmed comfort during new routine"),
+        new ClinicianAlertEvent(Guid.NewGuid(), "PT-77BC6521", "Sofia Alvarez", DateTime.Now.AddHours(-5), "High Pressure Alert", "New", "High", "Recurring midfoot pressure - monitor closely")
+    };
+
+    private readonly Dictionary<Guid, string> _eventStatuses = new();
+    private string _statusFilter = string.Empty;
+    private string _typeFilter = string.Empty;
+    private string _severityFilter = string.Empty;
+    private string _searchTerm = string.Empty;
+
+    private int NewEventsCount => Events.Count(e => string.Equals(GetStatus(e.Id), "New", StringComparison.OrdinalIgnoreCase));
+
+    protected override void OnInitialized()
+    {
+        foreach (var alertEvent in Events)
+        {
+            _eventStatuses.TryAdd(alertEvent.Id, alertEvent.Status);
+        }
+    }
+
+    private IEnumerable<ClinicianAlertEvent> FilteredEvents => Events
+        .Where(MatchesStatus)
+        .Where(MatchesType)
+        .Where(MatchesSeverity)
+        .Where(MatchesSearch)
+        .OrderByDescending(e => e.Timestamp);
+
+    private bool MatchesStatus(ClinicianAlertEvent evt)
+    {
+        if (string.IsNullOrWhiteSpace(_statusFilter))
+        {
+            return true;
+        }
+        return string.Equals(GetStatus(evt.Id), _statusFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool MatchesType(ClinicianAlertEvent evt)
+    {
+        if (string.IsNullOrWhiteSpace(_typeFilter))
+        {
+            return true;
+        }
+        return string.Equals(evt.EventType, _typeFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool MatchesSeverity(ClinicianAlertEvent evt)
+    {
+        if (string.IsNullOrWhiteSpace(_severityFilter))
+        {
+            return true;
+        }
+        return string.Equals(evt.Severity, _severityFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool MatchesSearch(ClinicianAlertEvent evt)
+    {
+        if (string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            return true;
+        }
+        var term = _searchTerm.Trim().ToLowerInvariant();
+        return evt.PatientId.ToLowerInvariant().Contains(term)
+            || evt.PatientName.ToLowerInvariant().Contains(term)
+            || evt.Summary.ToLowerInvariant().Contains(term);
+    }
+
+    private string GetStatus(Guid id) => _eventStatuses.TryGetValue(id, out var status) ? status : "New";
+
+    private void UpdateEventStatus(Guid id, string status)
+    {
+        var index = Events.ToList().FindIndex(e => e.Id == id);
+        if (index < 0)
+        {
+            return;
+        }
+
+        _eventStatuses[id] = status;
+    }
+
+    private static Color EventTypeColor(string eventType) => eventType switch
+    {
+        "High Pressure Alert" => Color.Error,
+        "Patient Comment" => Color.Info,
+        _ => Color.Secondary
+    };
+
+    private static Color SeverityColor(string severity) => severity switch
+    {
+        "Critical" => Color.Error,
+        "High" => Color.Warning,
+        "Moderate" => Color.Info,
+        "Informational" => Color.Secondary,
+        _ => Color.Primary
+    };
+}
+

@@ -1,0 +1,161 @@
+@page "/clinician/patients"
+@using GrapheneTrace.Client.Models
+@using MudBlazor
+
+<PageTitle>Patient Directory</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Patient Management</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Search, filter, and jump into detailed analysis for any assigned patient.
+            </MudText>
+        </div>
+        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">Total Patients: @Patients.Count</MudChip>
+    </MudStack>
+
+    <MudPaper Class="pa-4 mb-4 elevation-1">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="searchTerm"
+                              Variant="Variant.Outlined"
+                              Placeholder="Search by patient ID or name"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Outlined.Search"
+                              Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect T="string" @bind-Value="riskFilter" Label="Risk level" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@string.Empty">All risks</MudSelectItem>
+                    <MudSelectItem Value="@("Critical")">Critical</MudSelectItem>
+                    <MudSelectItem Value="@("High")">High</MudSelectItem>
+                    <MudSelectItem Value="@("Moderate")">Moderate</MudSelectItem>
+                    <MudSelectItem Value="@("Low")">Low</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect T="string" @bind-Value="alertFilter" Label="Recent alert severity" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@string.Empty">Any severity</MudSelectItem>
+                    <MudSelectItem Value="@("Critical")">Critical</MudSelectItem>
+                    <MudSelectItem Value="@("High")">High</MudSelectItem>
+                    <MudSelectItem Value="@("Moderate")">Moderate</MudSelectItem>
+                    <MudSelectItem Value="@("Informational")">Informational</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-0 elevation-2">
+        <MudTable T="ClinicianDirectoryPatient" Items="FilteredPatients" Hover="true" Dense="true">
+            <HeaderContent>
+                <MudTh>Patient</MudTh>
+                <MudTh>Risk</MudTh>
+                <MudTh class="text-end">Total Alerts</MudTh>
+                <MudTh>Last Alert</MudTh>
+                <MudTh>Last Severity</MudTh>
+                <MudTh>Device</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Patient">
+                    <MudText Typo="Typo.body2" Class="fw-semibold">@context.PatientId</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">@context.Name</MudText>
+                </MudTd>
+                <MudTd DataLabel="Risk">
+                    <MudChip T="string" Color="@RiskColor(context.RiskLevel)" Size="Size.Small">@context.RiskLevel</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Total Alerts" Class="text-end">@context.TotalAlerts</MudTd>
+                <MudTd DataLabel="Last Alert">
+                    <MudText Typo="Typo.body2">@context.LastAlertAt.ToString("g")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Last Severity">
+                    <MudChip T="string" Color="@SeverityColor(context.LastAlertSeverity)" Size="Size.Small">@context.LastAlertSeverity</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Device">
+                    <MudText Typo="Typo.body2">@context.AssignedDevice</MudText>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               Href="/clinician/patient-analysis">
+                        Open Analysis
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private readonly IReadOnlyList<ClinicianDirectoryPatient> Patients = new[]
+    {
+        new ClinicianDirectoryPatient("PT-71E66AB3", "Amelia Preston", "Critical", 18, DateTime.Now.AddMinutes(-12), "Critical", "Graphene Insole v3"),
+        new ClinicianDirectoryPatient("PT-19AA72F1", "Noah Sullivan", "High", 9, DateTime.Now.AddMinutes(-33), "High", "Graphene Insole v3"),
+        new ClinicianDirectoryPatient("PT-5FF9AA21", "Ella Martinez", "Moderate", 6, DateTime.Now.AddMinutes(-58), "Moderate", "Graphene Insole v2"),
+        new ClinicianDirectoryPatient("PT-5522201B", "Logan Pierce", "High", 11, DateTime.Now.AddHours(-2), "High", "Graphene Insole v3"),
+        new ClinicianDirectoryPatient("PT-90CC1144", "Harper Diaz", "Moderate", 5, DateTime.Now.AddHours(-7), "Informational", "Graphene Insole v1"),
+        new ClinicianDirectoryPatient("PT-43DD1982", "Maya Chen", "Low", 2, DateTime.Now.AddDays(-1), "Informational", "Graphene Insole v3"),
+        new ClinicianDirectoryPatient("PT-67AB3210", "Jonah Patel", "High", 8, DateTime.Now.AddHours(-5), "High", "Graphene Insole v2"),
+        new ClinicianDirectoryPatient("PT-77BC6521", "Sofia Alvarez", "Moderate", 4, DateTime.Now.AddHours(-9), "Moderate", "Graphene Insole v3")
+    };
+
+    private string searchTerm = string.Empty;
+    private string riskFilter = string.Empty;
+    private string alertFilter = string.Empty;
+
+    private IEnumerable<ClinicianDirectoryPatient> FilteredPatients => Patients
+        .Where(MatchesSearch)
+        .Where(MatchesRisk)
+        .Where(MatchesSeverity)
+        .OrderByDescending(p => p.LastAlertAt);
+
+    private bool MatchesSearch(ClinicianDirectoryPatient patient)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            return true;
+        }
+
+        var term = searchTerm.Trim().ToLowerInvariant();
+        return patient.PatientId.ToLowerInvariant().Contains(term) || patient.Name.ToLowerInvariant().Contains(term);
+    }
+
+    private bool MatchesRisk(ClinicianDirectoryPatient patient)
+    {
+        if (string.IsNullOrWhiteSpace(riskFilter))
+        {
+            return true;
+        }
+
+        return string.Equals(patient.RiskLevel, riskFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool MatchesSeverity(ClinicianDirectoryPatient patient)
+    {
+        if (string.IsNullOrWhiteSpace(alertFilter))
+        {
+            return true;
+        }
+
+        return string.Equals(patient.LastAlertSeverity, alertFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Color RiskColor(string riskLevel) => riskLevel switch
+    {
+        "Critical" => Color.Error,
+        "High" => Color.Warning,
+        "Moderate" => Color.Info,
+        _ => Color.Success
+    };
+
+    private static Color SeverityColor(string severity) => severity switch
+    {
+        "Critical" => Color.Error,
+        "High" => Color.Warning,
+        "Moderate" => Color.Info,
+        "Informational" => Color.Secondary,
+        _ => Color.Primary
+    };
+}
+

@@ -1,23 +1,169 @@
 ﻿@page "/clinician/dashboard"
 @using GrapheneTrace.Client.Services
-@using GrapheneTrace.Core.Enums
+@using GrapheneTrace.Client.Models
 @inject AuthService AuthService
 
 <PageTitle>Clinician Dashboard</PageTitle>
 
-<div class="container-fluid p-4">
-    <h1 class="mb-4">Clinician Dashboard</h1>
-
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Welcome, @AuthService.UserName!</h5>
-                    <p class="card-text">You are logged in as <strong>@AuthService.Role</strong></p>
-                    <p class="card-text">Email: @AuthService.UserEmail</p>
-                </div>
-            </div>
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Triage Overview</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Monitor urgent alerts, high-risk patients, and system health in real time.
+            </MudText>
         </div>
-    </div>
-</div>
+        <MudChip T="string" Color="Color.Primary">
+            @AuthService.UserName (@AuthService.UserEmail)
+        </MudChip>
+    </MudStack>
+
+    <MudGrid Class="mb-6">
+        @foreach (var card in AlertCards)
+        {
+            <MudItem xs="12" md="6" lg="3">
+                <MudCard Class="elevation-2 h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.subtitle2" Class="text-secondary">@card.Title</MudText>
+                                <MudIcon Icon="@card.Icon" Color="@card.IconColor" />
+                            </MudStack>
+                            <MudText Typo="Typo.h4" Class="fw-semibold">@card.Value</MudText>
+                            <MudText Typo="Typo.caption" Color="@card.TrendColor">@card.Trend</MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+
+    <MudGrid Spacing="2" Class="mb-6">
+        <MudItem xs="12" lg="7">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">High-Risk Patients</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">
+                        Prioritised by last alert severity and recency.
+                    </MudText>
+                </MudCardHeader>
+                <MudCardContent Class="pt-0">
+                    <MudTable T="ClinicianRiskPatient" Items="@HighRiskPatients" Dense="true" Hover="true">
+                        <HeaderContent>
+                            <MudTh>Patient</MudTh>
+                            <MudTh>Risk</MudTh>
+                            <MudTh>Last Alert</MudTh>
+                            <MudTh>Status</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Patient">
+                                <MudText Typo="Typo.body2" Class="fw-semibold">@context.PatientId</MudText>
+                                <MudText Typo="Typo.caption" Class="text-secondary">@context.Name</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Risk">
+                                <MudChip T="string" Color="@context.RiskColor" Size="Size.Small">@context.RiskLevel</MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Last Alert">
+                                <MudText Typo="Typo.body2">@context.LastAlertSummary</MudText>
+                                <MudText Typo="Typo.caption" Class="text-secondary">@context.LastAlertAt.ToString("g")</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Status">
+                                <MudText Typo="Typo.caption">@context.SensorStatus</MudText>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" lg="5">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">System Status</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">
+                        Live ingest & notification indicators.
+                    </MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudList T="string" Dense="true">
+                        <MudListItem>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.CloudDone" Color="Color.Success" />
+                                <MudText>Sensor ingest pipeline healthy (last packet 4m ago)</MudText>
+                            </MudStack>
+                        </MudListItem>
+                        <MudListItem>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Color="Color.Warning" />
+                                <MudText>1 alert queue awaiting clinician acknowledgement</MudText>
+                            </MudStack>
+                        </MudListItem>
+                        <MudListItem>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Sync" Color="Color.Info" />
+                                <MudText>Analytics refresh completed 12 minutes ago</MudText>
+                            </MudStack>
+                        </MudListItem>
+                        <MudListItem>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Primary" />
+                                <MudText>Timeseries storage operating at 63% of throughput budget</MudText>
+                            </MudStack>
+                        </MudListItem>
+                    </MudList>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudCard Class="elevation-2">
+        <MudCardHeader>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudStack>
+                    <MudText Typo="Typo.h6">Recent Workflow Activity</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">Events across triage, investigation, and communication workstreams.</MudText>
+                </MudStack>
+                <MudChip T="string" Color="Color.Info">Last 12 hours</MudChip>
+            </MudStack>
+        </MudCardHeader>
+        <MudCardContent Class="pt-0">
+            <MudTimeline>
+                @foreach (var entry in TimelineEntries)
+                {
+                    <MudTimelineItem Color="@entry.Color" Icon="@Icons.Material.Filled.ArrowRightAlt">
+                        <MudText Typo="Typo.body2" Class="fw-semibold">@entry.Timestamp.ToString("HH:mm")</MudText>
+                        <MudText Typo="Typo.body2">@entry.Label</MudText>
+                    </MudTimelineItem>
+                }
+            </MudTimeline>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private IReadOnlyList<ClinicianAlertCard> AlertCards { get; } = new[]
+    {
+        new ClinicianAlertCard("New High-Pressure Alerts", "8", "2 escalated in the last hour", Color.Warning, Icons.Material.Filled.WarningAmber, Color.Warning),
+        new ClinicianAlertCard("Pending Patient Comments", "5", "3 awaiting reply", Color.Info, Icons.Material.Filled.MarkUnreadChatAlt, Color.Info),
+        new ClinicianAlertCard("Patients Monitored", "42", "+4 compared to yesterday", Color.Success, Icons.Material.Filled.Groups, Color.Primary),
+        new ClinicianAlertCard("AI Risk Reassessed", "16", "Updated since midnight", Color.Secondary, Icons.Material.Filled.AutoAwesome, Color.Secondary)
+    };
+
+    private IReadOnlyList<ClinicianRiskPatient> HighRiskPatients { get; } = new[]
+    {
+        new ClinicianRiskPatient("PT-71E66AB3", "Amelia Preston", "Critical", Color.Error, "Peak pressure 27% above baseline", DateTime.Now.AddMinutes(-12), "Sensor streaming"),
+        new ClinicianRiskPatient("PT-19AA72F1", "Noah Sullivan", "High", Color.Warning, "Recurring heel hotspot detected", DateTime.Now.AddMinutes(-33), "Sensor streaming"),
+        new ClinicianRiskPatient("PT-5FF9AA21", "Ella Martinez", "Moderate", Color.Info, "Flagged discomfort during walk", DateTime.Now.AddMinutes(-58), "Awaiting comment"),
+        new ClinicianRiskPatient("PT-5522201B", "Logan Pierce", "High", Color.Warning, "Alert resolved - monitor for 6h", DateTime.Now.AddHours(-2), "In review"),
+        new ClinicianRiskPatient("PT-90CC1144", "Harper Diaz", "Moderate", Color.Info, "Stable - last alert 7h ago", DateTime.Now.AddHours(-7), "Sensor paused")
+    };
+
+    private IReadOnlyList<TimelineMarker> TimelineEntries { get; } = new[]
+    {
+        new TimelineMarker(DateTime.Now.AddMinutes(-8), "Reviewed PT-71E66AB3 alert and initiated outreach", Color.Warning),
+        new TimelineMarker(DateTime.Now.AddMinutes(-21), "Responded to patient comment on PT-5FF9AA21", Color.Info),
+        new TimelineMarker(DateTime.Now.AddMinutes(-44), "AI recalculated risk tiers for 16 patients", Color.Success),
+        new TimelineMarker(DateTime.Now.AddHours(-2), "Downloaded comparative report for PT-19AA72F1", Color.Secondary),
+        new TimelineMarker(DateTime.Now.AddHours(-5), "Resolved alert on PT-5522201B after follow-up", Color.Success)
+    };
+}
 

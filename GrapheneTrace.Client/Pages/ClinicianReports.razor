@@ -1,0 +1,146 @@
+@page "/clinician/reports"
+@using GrapheneTrace.Client.Models
+@using MudBlazor
+
+<PageTitle>Reporting &amp; Exports</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Reporting &amp; Exports</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Generate comparative summaries and export data for patient files or external analysis.
+            </MudText>
+        </div>
+        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">Last export: 2 hours ago</MudChip>
+    </MudStack>
+
+    <MudPaper Class="pa-4 elevation-1 mb-4">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_patientId"
+                              Label="Patient ID"
+                              Variant="Variant.Outlined"
+                              Placeholder="PT-71E66AB3"
+                              Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_primaryStart" Label="Primary period start" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_primaryEnd" Label="Primary period end" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="ComparisonPreset" @bind-Value="_comparisonPreset" Label="Comparison range" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@ComparisonPreset.PreviousDay">Previous day</MudSelectItem>
+                    <MudSelectItem Value="@ComparisonPreset.PreviousWeek">Previous week average</MudSelectItem>
+                    <MudSelectItem Value="@ComparisonPreset.Custom">Custom range</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        @if (_comparisonPreset == ComparisonPreset.Custom)
+        {
+            <MudGrid Spacing="2" Class="mt-2">
+                <MudItem xs="12" md="3">
+                    <MudDatePicker @bind-Date="_comparisonStart" Label="Comparison start" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudDatePicker @bind-Date="_comparisonEnd" Label="Comparison end" Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+        }
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-4">
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.GridOn">Export CSV</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PictureAsPdf">Download PDF</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" lg="6">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Key Metric Comparison</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">Primary period vs comparison range.</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudTable T="ClinicianReportMetric" Items="@ReportMetrics" Dense="true" Hover="true">
+                        <HeaderContent>
+                            <MudTh>Metric</MudTh>
+                            <MudTh>Primary</MudTh>
+                            <MudTh>Comparison</MudTh>
+                            <MudTh>Change</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Metric">@context.Metric</MudTd>
+                            <MudTd DataLabel="Primary">@context.CurrentValue</MudTd>
+                            <MudTd DataLabel="Comparison">@context.ComparisonValue</MudTd>
+                            <MudTd DataLabel="Change">
+                                <MudChip T="string" Color="@context.DeltaColor" Size="Size.Small">
+                                    <MudIcon Icon="@context.TrendIcon" Class="me-1" />
+                                    @context.DeltaText
+                                </MudChip>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" lg="6">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Hourly Pressure Trend</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">Overlay of peak pressure index across the two selected periods.</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudChart ChartType="ChartType.Line" XAxisLabels="@TrendLabels" ChartSeries="@TrendSeries" />
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudCard Class="elevation-1 mt-4">
+        <MudCardHeader>
+            <MudText Typo="Typo.h6">Narrative Summary</MudText>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudText Typo="Typo.body1">
+                Pressure exposure during the selected period shows an elevated heel hotspot between 18:00&nbsp;–&nbsp;20:00, with peak pressure
+                +26% higher relative to the previous day. Contact area remained within recommended bounds, suggesting adequate load distribution.
+                Recommend reinforcing cooldown routine and monitoring patient feedback after orthotic adjustment scheduled tomorrow.
+            </MudText>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private readonly IReadOnlyList<ClinicianReportMetric> ReportMetrics = new[]
+    {
+        new ClinicianReportMetric("Peak Pressure Index", "11.6", "8.9", "+30.3%", Color.Error, Icons.Material.Filled.ArrowUpward),
+        new ClinicianReportMetric("Contact Area %", "59%", "61%", "-2%", Color.Info, Icons.Material.Filled.HorizontalRule),
+        new ClinicianReportMetric("Alerts Generated", "8", "3", "+5", Color.Warning, Icons.Material.Filled.ArrowUpward),
+        new ClinicianReportMetric("Patient Comments", "2", "1", "+1", Color.Info, Icons.Material.Filled.ArrowUpward)
+    };
+
+    private readonly string[] TrendLabels = { "08:00", "12:00", "16:00", "18:00", "20:00", "22:00" };
+
+    private readonly List<ChartSeries> TrendSeries = new()
+    {
+        new ChartSeries { Name = "Primary Period", Data = new double[] { 7.2, 8.5, 9.3, 10.7, 11.6, 9.9 } },
+        new ChartSeries { Name = "Comparison Period", Data = new double[] { 6.8, 7.4, 7.9, 8.4, 8.7, 7.5 } }
+    };
+
+    private string _patientId = "PT-71E66AB3";
+    private DateTime? _primaryStart = DateTime.Today;
+    private DateTime? _primaryEnd = DateTime.Today;
+    private DateTime? _comparisonStart = DateTime.Today.AddDays(-1);
+    private DateTime? _comparisonEnd = DateTime.Today.AddDays(-1);
+    private ComparisonPreset _comparisonPreset = ComparisonPreset.PreviousDay;
+
+    private enum ComparisonPreset
+    {
+        PreviousDay,
+        PreviousWeek,
+        Custom
+    }
+}
+

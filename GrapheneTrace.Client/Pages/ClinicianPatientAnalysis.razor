@@ -1,0 +1,219 @@
+@page "/clinician/patient-analysis"
+@using GrapheneTrace.Client.Models
+@using MudBlazor
+
+<PageTitle>Patient Details &amp; Analysis</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Patient Investigation</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Deep dive into historical pressure frames, key metrics, and flagged events.
+            </MudText>
+        </div>
+        <MudChip T="string" Color="Color.Primary">PT-71E66AB3 · Amelia Preston</MudChip>
+    </MudStack>
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" lg="6">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack>
+                            <MudText Typo="Typo.h6">Heat Map</MudText>
+                            <MudText Typo="Typo.caption" Class="text-secondary">
+                                Frame @selectedFrame.Timestamp.ToString("g"): pressure intensity across 32×32 sensor grid.
+                            </MudText>
+                        </MudStack>
+                        <MudChip T="string" Color="Color.Warning">AI Alert @selectedFrame.Timestamp.ToString("HH:mm:ss")</MudChip>
+                    </MudStack>
+                </MudCardHeader>
+                <MudCardContent>
+                    <div class="heatmap-grid">
+                        @foreach (var row in selectedFrame.Values)
+                        {
+                            <div class="heatmap-row">
+                                @foreach (var value in row)
+                                {
+                                    <div class="heatmap-cell" style="--intensity:@value;"></div>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <MudSlider Min="0"
+                               Max="@(_frames.Count - 1)"
+                               Step="1"
+                               @bind-Value="_selectedFrameIndex"
+                               ValueLabel="true"
+                               Class="mt-4" />
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" lg="6">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Current Frame Metrics</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">Live values for selected timestamp.</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudPaper Class="metric-card" Elevation="1">
+                                <MudText Typo="Typo.overline" Class="text-secondary">Peak Pressure Index</MudText>
+                                <MudText Typo="Typo.h4">@SelectedPeakPressure.ToString("F1")</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Warning">+26% vs baseline</MudText>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudPaper Class="metric-card" Elevation="1">
+                                <MudText Typo="Typo.overline" Class="text-secondary">Contact Area %</MudText>
+                                <MudText Typo="Typo.h4">@SelectedContactArea.ToString("F1")%</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Success">Within clinician range</MudText>
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                    <MudDivider Class="my-4" />
+                    <MudSelect T="TimelineRange" @bind-Value="_selectedRange" Label="Time range" Variant="Variant.Outlined" Dense="true" Class="mt-2" Style="max-width: 220px;">
+                        <MudSelectItem Value="@TimelineRange.LastHour">Last 1h</MudSelectItem>
+                        <MudSelectItem Value="@TimelineRange.Last6Hours">Last 6h</MudSelectItem>
+                        <MudSelectItem Value="@TimelineRange.LastDay">24h</MudSelectItem>
+                        <MudSelectItem Value="@TimelineRange.LastWeek">Last Week</MudSelectItem>
+                    </MudSelect>
+                    <MudTabs Rounded="true" Class="mt-4">
+                        <MudTabPanel Text="Peak Pressure Index">
+                            <MudChart ChartType="ChartType.Line" XAxisLabels="@MetricLabels" ChartSeries="@PpiSeries" />
+                        </MudTabPanel>
+                        <MudTabPanel Text="Contact Area %">
+                            <MudChart ChartType="ChartType.Line" XAxisLabels="@MetricLabels" ChartSeries="@ContactAreaSeries" />
+                        </MudTabPanel>
+                    </MudTabs>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Spacing="2" Class="mt-4">
+        <MudItem xs="12" lg="6">
+            <MudCard Class="elevation-1 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Timeline Highlights</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">Important clinician and patient events.</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudTimeline>
+                        @foreach (var marker in TimelineMarkers)
+                        {
+                            <MudTimelineItem Color="Color.Primary" Icon="@Icons.Material.Filled.Flag">
+                                <MudText Typo="Typo.body2" Class="fw-semibold">@marker.Timestamp.ToString("g")</MudText>
+                                <MudText Typo="Typo.body2">@marker.Label</MudText>
+                            </MudTimelineItem>
+                        }
+                    </MudTimeline>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" lg="6">
+            <MudCard Class="elevation-1 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Next Steps &amp; Notes</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudList T="string" Dense="true">
+                        <MudListItem>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Color="Color.Warning" />
+                                <MudText>Schedule follow-up video consult within 24 hours due to repeated heel hotspots.</MudText>
+                            </MudStack>
+                        </MudListItem>
+                        <MudListItem>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.InsertChart" Color="Color.Primary" />
+                                <MudText>Compare pressure map against pre-orthotic baseline to confirm improvement trajectory.</MudText>
+                            </MudStack>
+                        </MudListItem>
+                        <MudListItem>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Chat" Color="Color.Info" />
+                                <MudText>Reply to patient feedback referencing discomfort reported during evening walk.</MudText>
+                            </MudStack>
+                        </MudListItem>
+                    </MudList>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private readonly List<HeatMapFrame> _frames = new()
+    {
+        new HeatMapFrame(DateTime.Now.AddMinutes(-45), GenerateFrame(seed: 5)),
+        new HeatMapFrame(DateTime.Now.AddMinutes(-30), GenerateFrame(seed: 12)),
+        new HeatMapFrame(DateTime.Now.AddMinutes(-18), GenerateFrame(seed: 21)),
+        new HeatMapFrame(DateTime.Now.AddMinutes(-12), GenerateFrame(seed: 33)),
+        new HeatMapFrame(DateTime.Now.AddMinutes(-6), GenerateFrame(seed: 41)),
+        new HeatMapFrame(DateTime.Now, GenerateFrame(seed: 48))
+    };
+
+    private readonly IReadOnlyList<TimelineMarker> TimelineMarkers = new[]
+    {
+        new TimelineMarker(DateTime.Now.AddMinutes(-40), "AI flagged sustained pressure > 26% above baseline", Color.Warning),
+        new TimelineMarker(DateTime.Now.AddMinutes(-32), "Patient reported discomfort during evening walk", Color.Info),
+        new TimelineMarker(DateTime.Now.AddMinutes(-27), "Clinician acknowledged alert and began review", Color.Secondary),
+        new TimelineMarker(DateTime.Now.AddMinutes(-18), "Heel offloading instructions sent to patient app", Color.Success)
+    };
+
+    private readonly string[] MetricLabels = { "-45", "-30", "-18", "-12", "-6", "Now" };
+
+    private readonly List<ChartSeries> PpiSeries = new()
+    {
+        new ChartSeries { Name = "Peak Pressure Index", Data = new double[] { 8.4, 9.1, 9.8, 10.6, 11.1, 11.6 } },
+        new ChartSeries { Name = "Baseline", Data = new double[] { 7.3, 7.3, 7.3, 7.3, 7.3, 7.3 } }
+    };
+
+    private readonly List<ChartSeries> ContactAreaSeries = new()
+    {
+        new ChartSeries { Name = "Contact Area %", Data = new double[] { 64, 63, 62, 61, 60, 59 } },
+        new ChartSeries { Name = "Target", Data = new double[] { 58, 58, 58, 58, 58, 58 } }
+    };
+
+    private int _selectedFrameIndex = 4;
+    private TimelineRange _selectedRange = TimelineRange.Last6Hours;
+
+    private HeatMapFrame selectedFrame => _frames[_selectedFrameIndex];
+
+    private double SelectedPeakPressure => PpiSeries[0].Data[_selectedFrameIndex];
+    private double SelectedContactArea => ContactAreaSeries[0].Data[_selectedFrameIndex];
+
+    private static IReadOnlyList<IReadOnlyList<int>> GenerateFrame(int seed)
+    {
+        var random = new Random(seed);
+        var rows = new List<IReadOnlyList<int>>(16);
+        for (var r = 0; r < 16; r++)
+        {
+            var row = new List<int>(16);
+            for (var c = 0; c < 16; c++)
+            {
+                // Simulate normalized intensity (0-100)
+                var value = random.Next(10, 85);
+                if (r > 9 && c is > 6 and < 11)
+                {
+                    value = random.Next(70, 100);
+                }
+                row.Add(value);
+            }
+            rows.Add(row);
+        }
+        return rows;
+    }
+
+    private enum TimelineRange
+    {
+        LastHour,
+        Last6Hours,
+        LastDay,
+        LastWeek
+    }
+}
+
