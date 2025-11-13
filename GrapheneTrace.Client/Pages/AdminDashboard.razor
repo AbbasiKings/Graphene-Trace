@@ -5,19 +5,169 @@
 
 <PageTitle>Admin Dashboard</PageTitle>
 
-<div class="container-fluid p-4">
-    <h1 class="mb-4">Admin Dashboard</h1>
-
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Welcome, @AuthService.UserName!</h5>
-                    <p class="card-text">You are logged in as <strong>@AuthService.Role</strong></p>
-                    <p class="card-text">Email: @AuthService.UserEmail</p>
-                </div>
-            </div>
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Admin Dashboard</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Monitoring system health, usage, and recent administrative activity.
+            </MudText>
         </div>
-    </div>
-</div>
+        <MudChip T="string" Color="Color.Primary">
+            @AuthService.UserName (@AuthService.Role)
+        </MudChip>
+    </MudStack>
+
+    <MudGrid Class="mb-6">
+        @foreach (var metric in Metrics)
+        {
+            <MudItem xs="12" sm="6" lg="3">
+                <MudCard Class="h-100 elevation-2">
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@metric.Icon" Color="Color.Primary" Class="me-2" />
+                            <MudStack>
+                                <MudText Typo="Typo.subtitle2" Class="text-secondary">@metric.Title</MudText>
+                                <MudText Typo="Typo.h5" Class="fw-semibold">@metric.Value</MudText>
+                            </MudStack>
+                        </MudStack>
+                        <MudDivider Class="my-3" />
+                        <MudText Typo="Typo.caption" Class="text-secondary">@metric.Subtitle</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+
+    <MudGrid Class="mb-6">
+        <MudItem xs="12" md="7">
+            <MudCard Class="h-100 elevation-2">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">User Growth Trend</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">New registrations in the last 30 days</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudChart ChartType="ChartType.Line"
+                              Class="pt-4"
+                              XAxisLabels="@UsageLabels"
+                              ChartSeries="@UsageSeries" />
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudCard Class="h-100 elevation-2">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Data Ingestion Status (24h)</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">Most recent events from platform ingest services</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudTable T="DataIngestionStatus" Dense="true" Hover="true" Bordered="false" Items="@IngestionStatuses">
+                        <HeaderContent>
+                            <MudTh>User</MudTh>
+                            <MudTh>Timestamp</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh>Message</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="User">@context.UserId</MudTd>
+                            <MudTd DataLabel="Timestamp">@context.Timestamp.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                            <MudTd DataLabel="Status">
+                                <MudChip T="string" Color="@StatusColor(context.Severity)" Size="Size.Small">@context.Status</MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Message">@context.Message</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudCard Class="elevation-2">
+        <MudCardHeader>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudStack>
+                    <MudText Typo="Typo.h6">Recent Audit Activity</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">
+                        Ten most recent administrative and security events
+                    </MudText>
+                </MudStack>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/admin/configuration">
+                    View Audit Console
+                </MudButton>
+            </MudStack>
+        </MudCardHeader>
+        <MudCardContent Class="pt-0">
+            <MudTable T="AuditLogEntry" Dense="true" Hover="true" Bordered="false" Items="@AuditLog">
+                <HeaderContent>
+                    <MudTh>When</MudTh>
+                    <MudTh>User</MudTh>
+                    <MudTh>Action</MudTh>
+                    <MudTh>Target</MudTh>
+                    <MudTh>Severity</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="When">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                    <MudTd DataLabel="User">@context.Actor</MudTd>
+                    <MudTd DataLabel="Action">@context.Action</MudTd>
+                    <MudTd DataLabel="Target">@context.Target</MudTd>
+                    <MudTd DataLabel="Severity">
+                        <MudChip T="string" Color="@StatusColor(context.Severity)" Size="Size.Small">
+                            @context.Severity
+                        </MudChip>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private List<AdminMetric> Metrics { get; } =
+    [
+        new("Active Patients", "1,842", "↑ 6.2% vs last month", Icons.Material.Filled.MedicalServices),
+        new("Clinicians", "316", "Licensed practitioners with live dashboards", Icons.Material.Filled.Groups),
+        new("Data Volume", "12.4M frames", "Total pressure frames stored", Icons.Material.Filled.Storage),
+        new("Alerts (24h)", "38", "Handled by clinicians in the last 24 hours", Icons.Material.Filled.NotificationsActive)
+    ];
+
+    private string[] UsageLabels { get; } = ["Day -6", "Day -5", "Day -4", "Day -3", "Day -2", "Day -1", "Today"];
+
+    private List<ChartSeries> UsageSeries { get; } =
+    [
+        new ChartSeries { Name = "Patients", Data = new double[] { 32, 35, 38, 41, 45, 49, 53 } },
+        new ChartSeries { Name = "Clinicians", Data = new double[] { 22, 24, 25, 27, 30, 32, 35 } }
+    ];
+
+    private List<DataIngestionStatus> IngestionStatuses { get; } =
+    [
+        new("71e66ab3", DateTime.Today.AddHours(-2), "Processing", "Ingestion running - 18% complete", "Info"),
+        new("12bd4431", DateTime.Today.AddHours(-5), "Complete", "Frames archived and verified", "Success"),
+        new("9af433c2", DateTime.Today.AddHours(-9), "Warning", "Delayed ingest - awaiting clinician review", "Warning"),
+        new("ff88321a", DateTime.Today.AddHours(-11), "Error", "Packet validation failed. Awaiting re-upload.", "Error"),
+        new("67aa11ce", DateTime.Today.AddHours(-15), "Complete", "Data synchronized to analytics cluster", "Success")
+    ];
+
+    private List<AuditLogEntry> AuditLog { get; } =
+    [
+        new(DateTime.Now.AddMinutes(-8), "g.turner@graphenetrace.com", "Created patient profile", "Patient 71e66ab3", "Info"),
+        new(DateTime.Now.AddMinutes(-21), "a.yeung@graphenetrace.com", "Updated threshold setting", "Smart Alerts > PPI Threshold", "Warning"),
+        new(DateTime.Now.AddMinutes(-36), "s.ahmed@graphenetrace.com", "Suspended user", "Clinician 5a3220", "Info"),
+        new(DateTime.Now.AddMinutes(-44), "security-service", "Failed login attempt", "admin@graphenetrace.com", "Error"),
+        new(DateTime.Now.AddHours(-2), "n.dimitrov@graphenetrace.com", "Generated audit export", "Compliance report (PDF)", "Info"),
+        new(DateTime.Now.AddHours(-3), "integration-bot", "API key rotation", "Realtime ingest pipeline", "Warning"),
+        new(DateTime.Now.AddHours(-5), "l.daniels@graphenetrace.com", "Updated clinician assignment", "Patient 5ff9aa", "Info"),
+        new(DateTime.Now.AddHours(-8), "security-service", "Failed login attempt", "admin@graphenetrace.com", "Error"),
+        new(DateTime.Now.AddHours(-10), "m.cortez@graphenetrace.com", "Updated content template", "Alert email body", "Info"),
+        new(DateTime.Now.AddHours(-12), "backup-service", "Database backup completed", "Cluster east-us-2", "Success")
+    ];
+
+    private Color StatusColor(string severity) => severity switch
+    {
+        "Success" => Color.Success,
+        "Info" => Color.Info,
+        "Warning" => Color.Warning,
+        "Error" => Color.Error,
+        _ => Color.Default
+    };
+}
 

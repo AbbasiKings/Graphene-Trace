@@ -12,7 +12,7 @@
     @if (AuthService.IsAuthenticated)
     {
         <div class="sidebar">
-            <NavMenu Role="AuthService.Role" />
+            <NavMenu Role="@AuthService.Role" />
         </div>
 
         <main>

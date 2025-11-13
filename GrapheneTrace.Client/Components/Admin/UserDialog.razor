@@ -1,0 +1,105 @@
+@using GrapheneTrace.Client.Models
+@using MudBlazor
+
+<MudDialog Class="pt-4">
+    <DialogContent>
+        <MudForm @ref="form" Model="FormModel">
+            <MudStack Spacing="3">
+                <MudTextField T="string" @bind-Value="FormModel.FullName" Label="Full Name" Variant="Variant.Outlined" Required="true" For="() => FormModel.FullName" Immediate="true" />
+                <MudTextField T="string" @bind-Value="FormModel.Email" Label="Email" Variant="Variant.Outlined" Required="true" For="() => FormModel.Email" Immediate="true" InputType="InputType.Email" />
+
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="string" @bind-Value="FormModel.Role" Label="Role" Variant="Variant.Outlined" Required="true">
+                            <MudSelectItem Value="@RolePatient">Patient</MudSelectItem>
+                            <MudSelectItem Value="@RoleClinician">Clinician</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="string" @bind-Value="FormModel.Status" Label="Status" Variant="Variant.Outlined" Required="true">
+                            <MudSelectItem Value="@StatusActive">Active</MudSelectItem>
+                            <MudSelectItem Value="@StatusSuspended">Suspended</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+
+                @if (FormModel.Role == "Patient")
+                {
+                    <MudTextField T="string" @bind-Value="FormModel.AssignedClinician"
+                                  Label="Assigned Clinician"
+                                  Variant="Variant.Outlined"
+                                  Placeholder="e.g., Dr. Priya Kaur" />
+                }
+                else
+                {
+                    <MudTextField T="string" Value="@PlaceholderNotAssigned"
+                                  Label="Assigned Clinician"
+                                  Variant="Variant.Outlined"
+                                  Disabled="true" />
+                }
+
+                @if (FormModel.IsNew)
+                {
+                    <MudTextField T="string" @bind-Value="FormModel.Password"
+                                  Label="Temporary Password"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  For="() => FormModel.Password"
+                                  Immediate="true"
+                                  InputType="InputType.Password"
+                                  HelperText="When saved, the user receives an email to update their password." />
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="@saving">
+            @(IsEdit ? "Save Changes" : "Create User")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudForm? form;
+    private bool saving;
+    private const string PlaceholderNotAssigned = "Not Assigned";
+    private const string RolePatient = "Patient";
+    private const string RoleClinician = "Clinician";
+    private const string StatusActive = "Active";
+    private const string StatusSuspended = "Suspended";
+
+    [CascadingParameter]
+    private MudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public AdminUserFormModel FormModel { get; set; } = new();
+
+    [Parameter]
+    public bool IsEdit { get; set; }
+
+    private async Task Save()
+    {
+        if (form is null)
+        {
+            return;
+        }
+
+        saving = true;
+        await form.Validate();
+
+        if (!form.IsValid)
+        {
+            saving = false;
+            return;
+        }
+
+        saving = false;
+        MudDialog.Close(DialogResult.Ok(FormModel));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}

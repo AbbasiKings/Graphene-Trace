@@ -1,0 +1,306 @@
+@page "/admin/users"
+@inject IDialogService DialogService
+
+<PageTitle>Admin User Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">User Management</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Manage accounts, roles, and lifecycle operations across patients and clinicians.
+            </MudText>
+        </div>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenAddUserDialog">
+            Add New User
+        </MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4 mb-4 elevation-1">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <MudTextField @bind-Value="searchTerm" Placeholder="Search by name, email, or role" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Search" Immediate="true" Class="flex-grow-1" />
+            <MudSelect T="string" @bind-Value="roleFilter" Label="Role" Variant="Variant.Outlined" Dense="true">
+                <MudSelectItem Value="@string.Empty">All Roles</MudSelectItem>
+                <MudSelectItem Value="@RoleClinician">Clinician</MudSelectItem>
+                <MudSelectItem Value="@RolePatient">Patient</MudSelectItem>
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="statusFilter" Label="Status" Variant="Variant.Outlined" Dense="true">
+                <MudSelectItem Value="@string.Empty">All Statuses</MudSelectItem>
+                <MudSelectItem Value="@StatusActive">Active</MudSelectItem>
+                <MudSelectItem Value="@StatusSuspended">Suspended</MudSelectItem>
+            </MudSelect>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-0 elevation-2">
+        <MudDataGrid T="AdminUser" Items="@FilteredUsers"
+                     Hover="true"
+                     Dense="true"
+                     Bordered="false"
+                     RowClick="OnRowClick"
+                     SelectedItem="@selectedUser"
+                     Class="border-0">
+            <Columns>
+                <PropertyColumn T="AdminUser" TProperty="string" Property="@(u => u.Id)" Title="User ID" />
+                <PropertyColumn T="AdminUser" TProperty="string" Property="@(u => u.FullName)" Title="Name" />
+                <PropertyColumn T="AdminUser" TProperty="string" Property="@(u => u.Email)" Title="Email" />
+                <TemplateColumn Title="Role">
+                    <CellTemplate>
+                        <MudChip T="string" Color="@RoleChipColor(context.Item.Role)" Size="Size.Small">
+                            @context.Item.Role
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Status">
+                    <CellTemplate>
+                        <MudBadge Color="@StatusBadgeColor(context.Item.Status)">
+                            @context.Item.Status
+                        </MudBadge>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="AdminUser" TProperty="DateTime" Property="@(u => u.LastLogin)" Title="Last Login" Format="yyyy-MM-dd HH:mm" />
+                <TemplateColumn Title="Assigned Clinician">
+                    <CellTemplate>
+                        <MudText Typo="Typo.caption">@DisplayAssignedClinician(context.Item)</MudText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Actions">
+                    <CellTemplate>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEditUserDialog(context.Item)" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </MudDataGrid>
+    </MudPaper>
+
+    <MudGrid Class="mt-6">
+        <MudItem xs="12" md="6">
+            <MudCard Class="h-100 elevation-1">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Selected User Snapshot</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    @if (selectedUser is null)
+                    {
+                        <MudText Typo="Typo.caption" Class="text-secondary">Select a user from the table to view details.</MudText>
+                    }
+                    else
+                    {
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.h6">@selectedUser.FullName</MudText>
+                            <MudText Typo="Typo.subtitle2" Class="text-secondary">@selectedUser.Email</MudText>
+                            <MudDivider Class="my-2" />
+                            <MudChip T="string" Color="Color.Primary">@selectedUser.Role</MudChip>
+                            <MudChip T="string" Color="@StatusBadgeColor(selectedUser.Status)">
+                                @selectedUser.Status
+                            </MudChip>
+                            <MudText Typo="Typo.body2">Last login: @selectedUser.LastLogin.ToString("f")</MudText>
+                            @if (selectedUser.Role == RolePatient)
+                            {
+                                <MudPaper Class="pa-3 border border-1 rounded-3">
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.subtitle2" Class="fw-semibold">Patient Data Summary</MudText>
+                                        <MudText Typo="Typo.body2">Assigned clinician: @DisplayAssignedClinician(selectedUser)</MudText>
+                                        <MudText Typo="Typo.body2">Total pressure frames stored: @selectedUser.TotalFrames:N0</MudText>
+                                        <MudText Typo="Typo.body2">Last data received: @selectedUser.LastDataReceived:g</MudText>
+                                    </MudStack>
+                                </MudPaper>
+                            }
+                        </MudStack>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudCard Class="h-100 elevation-1">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Lifecycle Guidance</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudStack Spacing="1">
+                        <MudAlert Severity="Severity.Info" Dense="true" Elevation="0">
+                            Use the Add User action to onboard patients and clinicians with minimal required details.
+                        </MudAlert>
+                        <MudAlert Severity="Severity.Info" Dense="true" Elevation="0">
+                            Click any row to review an account. Use the edit action to adjust roles or suspend access.
+                        </MudAlert>
+                        <MudAlert Severity="Severity.Warning" Dense="true" Elevation="0">
+                            Suspended users retain historical records but cannot sign in until reactivated.
+                        </MudAlert>
+                        <MudAlert Severity="Severity.Info" Dense="true" Elevation="0">
+                            Ensure patients remain linked to an active clinician for governance accountability.
+                        </MudAlert>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private const string NotAssignedLabel = "Not Assigned";
+    private const string RolePatient = "Patient";
+    private const string RoleClinician = "Clinician";
+    private const string StatusActive = "Active";
+    private const string StatusSuspended = "Suspended";
+
+    private readonly List<AdminUser> users =
+    [
+        new("PT-71e66ab3", "Amelia Preston", "amelia.preston@graphenetrace.com", RolePatient, StatusActive, DateTime.Now.AddHours(-3), "Dr. Priya Kaur", 18_450, DateTime.Today.AddHours(-2)),
+        new("PT-19aa72f1", "Noah Sullivan", "noah.sullivan@graphenetrace.com", RolePatient, StatusActive, DateTime.Now.AddHours(-6), "Dr. Priya Kaur", 9_428, DateTime.Today.AddHours(-6)),
+        new("PT-5ff9aa21", "Ella Martinez", "ella.martinez@graphenetrace.com", RolePatient, StatusSuspended, DateTime.Now.AddDays(-1), "Dr. Nikhil Rao", 12_102, DateTime.Today.AddDays(-2)),
+        new("CL-5a3220", "Dr. Priya Kaur", "priya.kaur@graphenetrace.com", RoleClinician, StatusActive, DateTime.Now.AddMinutes(-42), NotAssignedLabel, 0, DateTime.MinValue),
+        new("CL-77ac201", "Dr. Nathan Carter", "nathan.carter@graphenetrace.com", RoleClinician, StatusActive, DateTime.Now.AddHours(-1), NotAssignedLabel, 0, DateTime.MinValue),
+        new("CL-92be310", "Dr. Zainab Malik", "zainab.malik@graphenetrace.com", RoleClinician, StatusSuspended, DateTime.Now.AddDays(-3), NotAssignedLabel, 0, DateTime.MinValue)
+    ];
+
+    private string searchTerm = string.Empty;
+    private string roleFilter = string.Empty;
+    private string statusFilter = string.Empty;
+    private AdminUser? selectedUser;
+
+    private IEnumerable<AdminUser> FilteredUsers => users
+        .Where(MatchesSearch)
+        .Where(MatchesRole)
+        .Where(MatchesStatus)
+        .OrderByDescending(user => user.LastLogin);
+
+    private bool MatchesSearch(AdminUser user)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            return true;
+        }
+
+        var term = searchTerm.Trim().ToLowerInvariant();
+        return user.FullName.ToLowerInvariant().Contains(term)
+            || user.Email.ToLowerInvariant().Contains(term)
+            || user.Role.ToLowerInvariant().Contains(term)
+            || user.Id.ToLowerInvariant().Contains(term);
+    }
+
+    private bool MatchesRole(AdminUser user)
+    {
+        if (string.IsNullOrWhiteSpace(roleFilter))
+        {
+            return true;
+        }
+
+        return user.Role.Equals(roleFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool MatchesStatus(AdminUser user)
+    {
+        if (string.IsNullOrWhiteSpace(statusFilter))
+        {
+            return true;
+        }
+
+        return user.Status.Equals(statusFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnRowClick(DataGridRowClickEventArgs<AdminUser> args)
+    {
+        selectedUser = args.Item;
+    }
+
+    private async Task OpenAddUserDialog()
+    {
+        var model = new AdminUserFormModel
+        {
+            Role = RolePatient,
+            Status = StatusActive
+        };
+        await ShowUserDialog("Add New User", model, isEdit: false);
+    }
+
+    private async Task OpenEditUserDialog(AdminUser user)
+    {
+        var model = new AdminUserFormModel
+        {
+            Id = user.Id,
+            FullName = user.FullName,
+            Email = user.Email,
+            Role = user.Role,
+            Status = user.Status,
+            AssignedClinician = user.AssignedClinician
+        };
+
+        await ShowUserDialog("Edit User", model, isEdit: true);
+    }
+
+    private async Task ShowUserDialog(string title, AdminUserFormModel model, bool isEdit)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(UserDialog.FormModel)] = model,
+            [nameof(UserDialog.IsEdit)] = isEdit
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            FullWidth = true,
+            MaxWidth = MaxWidth.Small
+        };
+
+        var dialog = DialogService.Show<UserDialog>(title, parameters, options);
+        var result = await dialog.Result;
+
+        if (result.Canceled || result.Data is not AdminUserFormModel formResult)
+        {
+            return;
+        }
+
+        if (isEdit)
+        {
+            var index = users.FindIndex(u => u.Id.Equals(formResult.Id, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0)
+            {
+                var updated = users[index] with
+                {
+                    FullName = formResult.FullName,
+                    Email = formResult.Email,
+                    Role = formResult.Role,
+                    Status = formResult.Status,
+                    AssignedClinician = NormalizeAssignedClinician(formResult)
+                };
+                users[index] = updated;
+                selectedUser = updated;
+            }
+            return;
+        }
+
+        var guid = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        var prefix = string.Equals(formResult.Role, RoleClinician, StringComparison.OrdinalIgnoreCase) ? "CL" : "PT";
+        var newId = $"{prefix}-{guid}";
+
+        var assignedClinician = NormalizeAssignedClinician(formResult);
+
+        var createdUser = new AdminUser(
+            newId,
+            formResult.FullName,
+            formResult.Email,
+            formResult.Role,
+            formResult.Status,
+            DateTime.Now,
+            assignedClinician,
+            string.Equals(formResult.Role, RolePatient, StringComparison.OrdinalIgnoreCase) ? Random.Shared.Next(4_000, 12_000) : 0,
+            string.Equals(formResult.Role, RolePatient, StringComparison.OrdinalIgnoreCase) ? DateTime.Now : DateTime.MinValue);
+
+        users.Insert(0, createdUser);
+        selectedUser = createdUser;
+    }
+
+    private Color RoleChipColor(string role) => string.Equals(role, RoleClinician, StringComparison.OrdinalIgnoreCase) ? Color.Info : Color.Primary;
+
+    private Color StatusBadgeColor(string status) => string.Equals(status, StatusActive, StringComparison.OrdinalIgnoreCase) ? Color.Success : Color.Error;
+
+    private string DisplayAssignedClinician(AdminUser user) => string.Equals(user.Role, RolePatient, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(user.AssignedClinician)
+        ? user.AssignedClinician
+        : NotAssignedLabel;
+
+    private static string NormalizeAssignedClinician(AdminUserFormModel model) => string.Equals(model.Role, RolePatient, StringComparison.OrdinalIgnoreCase)
+        ? (string.IsNullOrWhiteSpace(model.AssignedClinician) ? NotAssignedLabel : model.AssignedClinician)
+        : NotAssignedLabel;
+}

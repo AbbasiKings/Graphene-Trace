@@ -1,0 +1,242 @@
+@page "/admin/configuration"
+
+<PageTitle>System Configuration & Auditing</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">System Configuration & Auditing</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Administer platform thresholds, review audit trails, and monitor service health.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+            Export Audit Log
+        </MudButton>
+    </MudStack>
+
+    <MudTabs Rounded="true">
+        <MudTabPanel Text="Global Settings" Icon="@Icons.Material.Filled.Tune">
+            <MudGrid Class="mt-4">
+                <MudItem xs="12" md="6">
+                    <MudCard Class="elevation-2">
+                        <MudCardHeader>
+                            <MudText Typo="Typo.h6">Pressure Analysis Thresholds</MudText>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudStack Spacing="3">
+                                @foreach (var setting in ConfigurationSettings)
+                                {
+                                    <div>
+                                        <MudText Typo="Typo.subtitle2" Class="fw-semibold">@setting.Name (@setting.Value @setting.Suffix)</MudText>
+                                        <MudText Typo="Typo.caption" Class="text-secondary">@setting.Description</MudText>
+                                        <MudSlider @bind-Value="setting.Value" Min="@setting.Min" Max="@setting.Max" Step="0.5" Color="Color.Primary" />
+                                    </div>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudCard Class="elevation-2">
+                        <MudCardHeader>
+                            <MudText Typo="Typo.h6">Smart Alert Controls</MudText>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudStack Spacing="2">
+                                <MudSwitch T="bool" @bind-Value="AlertingEnabled" Color="Color.Primary" Label="Enable smart alert dispatch" />
+                                <MudSlider T="double" @bind-Value="AlertSensitivity" Min="0" Max="100" Step="1" Color="Color.Warning" />
+                                <MudText Typo="Typo.caption" Class="text-secondary">
+                                    Sensitivity: @AlertSensitivity%
+                                </MudText>
+                                <MudDivider Class="my-2" />
+                                <MudTextField @bind-Value="EscalationWindow"
+                                              Label="Escalation window"
+                                              Variant="Variant.Outlined"
+                                              Placeholder="e.g., 15 minutes"
+                                              HelperText="Time allowed before alerts escalated to on-call clinician." />
+                                <MudSelect T="string" @bind-Value="NotificationChannel" Label="Primary notification channel" Variant="Variant.Outlined">
+                                    <MudSelectItem Value="@ChannelEmail">Email</MudSelectItem>
+                                    <MudSelectItem Value="@ChannelSms">SMS</MudSelectItem>
+                                    <MudSelectItem Value="@ChannelPagerDuty">PagerDuty</MudSelectItem>
+                                </MudSelect>
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Audit Logs" Icon="@Icons.Material.Filled.Rule">
+            <MudPaper Class="pa-4 mt-4 elevation-2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-4">
+                    <MudTextField @bind-Value="auditSearchTerm" Placeholder="Filter by user, action, or IP address" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Search" Immediate="true" Class="flex-grow-1" />
+                    <MudDateRangePicker @bind-DateRange="auditDateRange" Label="Date range" />
+                </MudStack>
+                <MudTable T="AuditLogDetail" Dense="true" Hover="true" Bordered="false" Breakpoint="Breakpoint.Md" Items="@FilteredAuditLogs">
+                    <HeaderContent>
+                        <MudTh>Timestamp</MudTh>
+                        <MudTh>User</MudTh>
+                        <MudTh>IP Address</MudTh>
+                        <MudTh>Action</MudTh>
+                        <MudTh>Outcome</MudTh>
+                        <MudTh>Notes</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Timestamp">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                        <MudTd DataLabel="User">@context.Actor</MudTd>
+                        <MudTd DataLabel="IP Address">@context.IpAddress</MudTd>
+                        <MudTd DataLabel="Action">@context.Action</MudTd>
+                        <MudTd DataLabel="Outcome">
+                            <MudChip T="string" Color="@OutcomeColor(context.Outcome)" Size="Size.Small">
+                                @context.Outcome
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Notes">@context.Notes</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Database Status" Icon="@Icons.Material.Filled.Storage">
+            <MudGrid Class="mt-4">
+                @foreach (var status in DatabaseStatuses)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudCard Class="elevation-2">
+                            <MudCardHeader>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Primary" Class="me-2" />
+                                    <MudText Typo="Typo.subtitle1" Class="fw-semibold">@status.System</MudText>
+                                </MudStack>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudChip T="string" Color="@StatusColor(status.Status)" Size="Size.Small">
+                                    @status.Status
+                                </MudChip>
+                                <MudText Typo="Typo.caption" Class="text-secondary mt-2">@status.Description</MudText>
+                                <MudText Typo="Typo.caption" Class="text-secondary">Last updated: @status.LastUpdated:g</MudText>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Content Management" Icon="@Icons.Material.Filled.Article">
+            <MudGrid Class="mt-4">
+                @foreach (var template in ContentTemplates)
+                {
+                    <MudItem xs="12" md="6">
+                        <MudCard Class="elevation-1">
+                            <MudCardHeader>
+                                <MudText Typo="Typo.subtitle1" Class="fw-semibold">@template.Description</MudText>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudTextField @bind-Value="template.Subject" Label="Subject" Variant="Variant.Outlined" />
+                                <MudTextField @bind-Value="template.Body" Label="Body" Variant="Variant.Outlined" Lines="5" Class="mt-3" />
+                                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-3">
+                                    <MudButton Variant="Variant.Text" Color="Color.Secondary">Reset</MudButton>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary">Save Draft</MudButton>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private List<ConfigurationSetting> ConfigurationSettings { get; } =
+    [
+        new("Peak Pressure Index Minimum", "Default minimum value used when calculating PPI across patient datasets.", 10.5, 5, 20, "px"),
+        new("Contact Area Threshold", "Lower threshold used when determining contact area percentage.", 32, 10, 60, "%"),
+        new("Daily Alert Cap", "Maximum alerts per patient before automatic escalation is triggered.", 12, 5, 20, "alerts")
+    ];
+
+    private bool AlertingEnabled { get; set; } = true;
+    private double AlertSensitivity { get; set; } = 68;
+    private string EscalationWindow { get; set; } = "15 minutes";
+    private string NotificationChannel { get; set; } = ChannelEmail;
+
+    private string auditSearchTerm = string.Empty;
+    private DateRange auditDateRange = new(DateTime.Today.AddDays(-7), DateTime.Today);
+
+    private List<AuditLogDetail> AuditLogs { get; } =
+    [
+        new(DateTime.Now.AddMinutes(-12), "g.turner@graphenetrace.com", "10.14.2.18", "Updated clinician mapping", "Success", "Linked patient PT-19aa72f1 to Dr. Kaur"),
+        new(DateTime.Now.AddMinutes(-35), "security-service", "10.14.2.12", "Failed login", "Failure", "Incorrect password for admin@graphenetrace.com"),
+        new(DateTime.Now.AddHours(-1), "n.dimitrov@graphenetrace.com", "172.31.8.9", "Changed alert sensitivity", "Success", "Adjusted from 70% to 65%"),
+        new(DateTime.Now.AddHours(-3), "integration-bot", "34.111.20.4", "Rotated API credential", "Success", "Pipeline: ingest-stream-east"),
+        new(DateTime.Now.AddHours(-6), "security-service", "10.14.2.12", "Failed login", "Failure", "Account locked for 10 minutes"),
+        new(DateTime.Now.AddHours(-9), "a.yeung@graphenetrace.com", "172.31.8.9", "Updated configuration", "Success", "Default PPI minimum set to 10.5 px"),
+        new(DateTime.Now.AddHours(-15), "backup-service", "10.14.2.19", "Backup completed", "Success", "Duration: 9m 12s"),
+        new(DateTime.Now.AddDays(-1), "audit-service", "10.14.2.30", "Exported audit report", "Success", "Period: 2025-10-01 to 2025-10-14"),
+        new(DateTime.Now.AddDays(-2), "security-service", "10.14.2.12", "Failed login", "Failure", "Suspicious attempt blocked"),
+        new(DateTime.Now.AddDays(-4), "c.williams@graphenetrace.com", "172.31.8.18", "Edited alert template", "Success", "Updated headline for urgent alerts")
+    ];
+
+    private IEnumerable<AuditLogDetail> FilteredAuditLogs => AuditLogs
+        .Where(log => MatchesAuditSearch(log) && WithinRange(log));
+
+    private bool MatchesAuditSearch(AuditLogDetail log)
+    {
+        if (string.IsNullOrWhiteSpace(auditSearchTerm))
+        {
+            return true;
+        }
+
+        var term = auditSearchTerm.Trim().ToLowerInvariant();
+        return log.Actor.ToLowerInvariant().Contains(term)
+            || log.Action.ToLowerInvariant().Contains(term)
+            || log.IpAddress.ToLowerInvariant().Contains(term)
+            || log.Notes.ToLowerInvariant().Contains(term);
+    }
+
+    private bool WithinRange(AuditLogDetail log)
+    {
+        if (auditDateRange.Start is null || auditDateRange.End is null)
+        {
+            return true;
+        }
+
+        var start = auditDateRange.Start.Value.Date;
+        var end = auditDateRange.End.Value.Date.AddDays(1).AddTicks(-1);
+        return log.OccurredAt >= start && log.OccurredAt <= end;
+    }
+
+    private List<DatabaseStatus> DatabaseStatuses { get; } =
+    [
+        new("Primary Cluster (East US)", "Operational", DateTime.Now.AddMinutes(-5), "Operational latency 21 ms / replication healthy"),
+        new("Analytics Warehouse", "Operational", DateTime.Now.AddMinutes(-12), "ETL sync completed 08:45 UTC"),
+        new("Disaster Recovery (West EU)", "Standby", DateTime.Now.AddHours(-1), "Ready for failover - last replication 59 minutes ago"),
+        new("Realtime Queue", "Degraded", DateTime.Now.AddMinutes(-2), "High throughput detected - monitoring backlog"),
+        new("Archive Storage", "Operational", DateTime.Now.AddMinutes(-19), "New partitions allocated for October datasets"),
+        new("Audit Store", "Operational", DateTime.Now.AddMinutes(-25), "Write amplification within policy"),
+    ];
+
+    private List<ContentTemplate> ContentTemplates { get; } =
+    [
+        new("AlertEmail", "Urgent Alert Email", "Action Required: Elevated Pressure Detected", "Hello {{ClinicianName}},\n\nThe system detected a sustained pressure reading above threshold for {{PatientName}} at {{Timestamp}}.\n\nRecommended next steps:\n• Review the latest frames in the clinician dashboard\n• Initiate outreach within 30 minutes if the readings persist\n\nRegards,\nGraphene Trace Platform"),
+        new("Onboarding", "Patient Onboarding Email", "Welcome to Graphene Trace", "Hello {{PatientName}},\n\nWelcome to the Graphene Trace platform. Your clinician {{ClinicianName}} has invited you to start monitoring pressure data using the Graphene sole sensors.\n\nTo get started:\n1. Download the Graphene Trace mobile app.\n2. Sign in using the email address you provided during enrollment.\n3. Follow the guided calibration steps.\n\nNeed help? Reply to this email or view our onboarding resources in the app.\n\nBest,\nThe Graphene Trace Team"),
+        new("SuspensionNotice", "Account Suspension Notice", "Notice: Account Suspension", "Hello {{UserName}},\n\nYour account has been temporarily suspended due to security policies. If this suspension was unexpected, please contact the system administrator at security@graphenetrace.com.\n\nRegards,\nSecurity Operations")
+    ];
+
+    private Color StatusColor(string status) => status switch
+    {
+        "Operational" => Color.Success,
+        "Standby" => Color.Info,
+        "Degraded" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private Color OutcomeColor(string outcome) => string.Equals(outcome, "Success", StringComparison.OrdinalIgnoreCase)
+        ? Color.Success
+        : Color.Error;
+
+    private const string ChannelEmail = "Email";
+    private const string ChannelSms = "SMS";
+    private const string ChannelPagerDuty = "PagerDuty";
+}
