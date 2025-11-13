@@ -10,44 +10,44 @@
 @inject AuthService AuthService
 
 <div class="w-full flex justify-center">
-    <section class="w-full max-w-lg">
-            <div class="bg-white shadow-2xl rounded-3xl border border-slate-100 px-8 py-10 space-y-8">
-                <header class="space-y-2 text-center md:text-left">
-                    <p class="uppercase tracking-[0.3em] text-[11px] text-slate-400">Access Portal</p>
-                    <h2 class="text-3xl font-semibold text-slate-800">Sign in to your account</h2>
-                    <p class="text-sm text-slate-500">Use your organization email and password to continue.</p>
-                </header>
+    <section class="w-[400px] max-w-lg">
+        <div class="bg-white shadow-2xl rounded-3xl border border-slate-100 px-8 py-10 space-y-8">
+            <header class="space-y-2 text-center md:text-left">
+                <p class="uppercase tracking-[0.3em] text-[11px] text-slate-400">Access Portal</p>
+                <h2 class="text-3xl font-semibold text-slate-800">Sign in to your account</h2>
+                <p class="text-sm text-slate-500">Use your organization email and password to continue.</p>
+            </header>
 
-                <div class="space-y-6">
-                    <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-slate-700" for="email">Email address</label>
-                        <input id="email"
-                               type="email"
-                               class="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-700 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                               placeholder="you@organization.com"
-                               @bind="Email"
-                               maxlength="100" />
-                        <p class="text-xs text-slate-500">Enter the email associated with your GrapheneTrace account.</p>
-                    </div>
-
-                    <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-slate-700" for="password">Password</label>
-                        <input id="password"
-                               type="password"
-                               class="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-700 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                               placeholder="Enter your password"
-                               @bind="Password"
-                               maxlength="50" />
-                        <p class="text-xs text-slate-500">Minimum of 6 characters with case sensitivity.</p>
-                    </div>
+            <div class="space-y-6">
+                <div class="space-y-2">
+                    <label class="block text-sm font-semibold text-slate-700" for="email">Email address</label>
+                    <input id="email"
+                            type="email"
+                            class="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-700 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="you@organization.com"
+                            @bind="Email"
+                            maxlength="100" />
+                    <p class="text-xs text-slate-500">Enter the email associated with your GrapheneTrace account.</p>
                 </div>
 
-                <div class="space-y-4">
-                    <button class="w-full rounded-xl bg-blue-600 text-white font-semibold tracking-wide py-3 shadow-lg hover:bg-blue-700 transition" @onclick="Authenticate">Login</button>
-                    <a href="/reset-password" class="w-full text-center inline-flex justify-center items-center rounded-xl border border-slate-300 text-slate-600 font-semibold py-3 hover:bg-slate-100 transition">Forgot Password</a>
+                <div class="space-y-2">
+                    <label class="block text-sm font-semibold text-slate-700" for="password">Password</label>
+                    <input id="password"
+                            type="password"
+                            class="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-700 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Enter your password"
+                            @bind="Password"
+                            maxlength="50" />
+                    <p class="text-xs text-slate-500">Minimum of 6 characters with case sensitivity.</p>
                 </div>
             </div>
-        </section>
+
+            <div class="space-y-4">
+                <button class="w-full rounded-xl bg-blue-600 text-white font-semibold tracking-wide py-3 shadow-lg hover:bg-blue-700 transition" @onclick="Authenticate">Login</button>
+                <a href="/reset-password" class="w-full text-center inline-flex justify-center items-center rounded-xl border border-slate-300 text-slate-600 font-semibold py-3 hover:bg-slate-100 transition">Forgot Password</a>
+            </div>
+        </div>
+    </section>
 </div>
 
 @code {
