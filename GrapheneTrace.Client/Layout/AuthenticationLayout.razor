@@ -1,0 +1,26 @@
+﻿@inherits LayoutComponentBase
+@using GrapheneTrace.Client.Services
+@using BlazorBootstrap
+@inject AppToastService ToastService
+
+<div class="min-h-screen bg-slate-100 flex items-center justify-center px-4">
+    <div class="w-full max-w-3xl">
+        @Body
+    </div>
+</div>
+
+<Toasts class="p-3" Messages="@messages" AutoHide="true" Delay="4000" Placement="ToastsPlacement.TopRight" />
+
+@code {
+    private List<ToastMessage> messages = new List<ToastMessage>();
+
+    protected override void OnInitialized()
+    {
+        ToastService.Subscribe(toast =>
+        {
+            messages.Add(toast);
+            StateHasChanged();
+        });
+    }
+}
+

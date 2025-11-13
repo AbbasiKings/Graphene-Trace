@@ -1,0 +1,95 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@using System
+@using GrapheneTrace.Client.Services
+@using GrapheneTrace.Core.Enums
+@using BlazorBootstrap
+@inject AppToastService ToastService
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+
+<div class="page">
+    @if (AuthService.IsAuthenticated)
+    {
+        <div class="sidebar">
+            <NavMenu Role="AuthService.Role" />
+        </div>
+
+        <main>
+            <div class="top-row px-4">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="text-muted">@AuthService.UserName (@AuthService.Role)</span>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="Logout">Logout</button>
+                </div>
+            </div>
+
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    }
+    else
+    {
+        <main class="w-100">
+            <article class="content px-4">
+                <p>Redirecting to login...</p>
+            </article>
+        </main>
+    }
+</div>
+
+<Toasts class="p-3" Messages="@messages" AutoHide="true" Delay="4000" Placement="ToastsPlacement.TopRight" />
+
+@code {
+    private readonly List<ToastMessage> messages = new List<ToastMessage>();
+
+    protected override void OnInitialized()
+    {
+        ToastService.Subscribe(toast =>
+        {
+            messages.Add(toast);
+            StateHasChanged();
+        });
+
+        AuthService.AuthenticationStateChanged += HandleAuthStateChanged;
+        EnsureAuthenticated();
+    }
+
+    private void HandleAuthStateChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (!AuthService.IsAuthenticated)
+            {
+                NavigateToLogin();
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private void EnsureAuthenticated()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            NavigateToLogin();
+        }
+    }
+
+    private void NavigateToLogin()
+    {
+        NavigationManager.NavigateTo("/login", true);
+    }
+
+    private void Logout()
+    {
+        AuthService.Logout();
+        NavigateToLogin();
+    }
+
+    public void Dispose()
+    {
+        AuthService.AuthenticationStateChanged -= HandleAuthStateChanged;
+    }
+}
+

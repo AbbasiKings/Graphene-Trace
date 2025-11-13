@@ -1,0 +1,6 @@
+@GrapheneTrace.Api_HostAddress = http://localhost:5200
+
+GET {{GrapheneTrace.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

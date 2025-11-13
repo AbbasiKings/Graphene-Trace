@@ -1,0 +1,19 @@
+# Visual Studio
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.log
+
+# Node / npm
+node_modules/
+
+# Build results
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# Others
+*.DS_Store
