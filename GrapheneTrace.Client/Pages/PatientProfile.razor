@@ -1,0 +1,151 @@
+@page "/patient/profile"
+@using GrapheneTrace.Client.Models
+
+<PageTitle>Profile & Settings</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6 patient-profile">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Profile &amp; Settings</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Keep your information up to date and choose how you receive important alerts.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save">
+            Save Changes
+        </MudButton>
+    </MudStack>
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" md="6">
+            <MudCard Class="elevation-2">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Personal Information</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Full name" Variant="Variant.Outlined" @bind-Value="fullName" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Date of birth" Variant="Variant.Outlined" @bind-Value="dateOfBirth" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Email" Variant="Variant.Outlined" @bind-Value="email" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField Label="Phone number" Variant="Variant.Outlined" @bind-Value="phoneNumber" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudTextField Label="Primary address"
+                                          Variant="Variant.Outlined"
+                                          Lines="2"
+                                          @bind-Value="primaryAddress" />
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudCard Class="elevation-2">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Assigned Clinician</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudStack Spacing="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudAvatar Size="Size.Large" Color="Color.Primary">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" />
+                            </MudAvatar>
+                            <MudStack>
+                                <MudText Typo="Typo.subtitle1" Class="fw-semibold">Dr. Harper Diaz</MudText>
+                                <MudText Typo="Typo.caption" Class="text-secondary">Podiatric specialist · Graphene Trace Clinic</MudText>
+                            </MudStack>
+                        </MudStack>
+                        <MudDivider />
+                        <MudText Typo="Typo.caption" Class="text-secondary">Contact options</MudText>
+                        <MudList T="string" Dense="true">
+                            <MudListItem T="string">
+                                <MudIcon Icon="@Icons.Material.Filled.Email" Class="me-2" />
+                                harper.diaz@graphenetrace.com
+                            </MudListItem>
+                            <MudListItem T="string">
+                                <MudIcon Icon="@Icons.Material.Filled.Phone" Class="me-2" />
+                                +1 (555) 013-7789
+                            </MudListItem>
+                            <MudListItem T="string">
+                                <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="me-2" />
+                                Next check-in: Tomorrow - 09:30 AM (virtual)
+                            </MudListItem>
+                        </MudList>
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CalendarToday">
+                            Schedule new appointment
+                        </MudButton>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudCard Class="elevation-1 mt-4">
+        <MudCardHeader>
+            <MudText Typo="Typo.h6">Notification Preferences</MudText>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudGrid Spacing="2">
+                @foreach (var preference in NotificationPreferences)
+                {
+                    <MudItem xs="12" md="4">
+                        <MudPaper Class="pa-4 preference-card" Elevation="1">
+                            <MudStack Spacing="1">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Notifications" Color="Color.Primary" />
+                                    <MudText Typo="Typo.subtitle2" Class="fw-semibold">@preference.Label</MudText>
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Class="text-secondary">@preference.Description</MudText>
+                                <MudSwitch T="bool" @bind-Value="preference.Enabled" Color="Color.Primary" />
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudCardContent>
+    </MudCard>
+
+    <MudCard Class="elevation-1 mt-4">
+        <MudCardHeader>
+            <MudText Typo="Typo.h6">Security</MudText>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.caption" Class="text-secondary">
+                    Keep your account secure by using a strong password and enabling multi-factor authentication.
+                </MudText>
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.LockReset" Color="Color.Primary">
+                        Change password
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Fingerprint">
+                        Enable MFA
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private string fullName = "Amelia Preston";
+    private string dateOfBirth = "1991-04-18";
+    private string email = "amelia.preston@example.com";
+    private string phoneNumber = "+1 (555) 016-4920";
+    private string primaryAddress = "221 Lakeview Dr, Floor 3 - Boston, MA 02116";
+
+    private readonly List<PatientNotificationPreference> NotificationPreferences = new()
+    {
+        new PatientNotificationPreference("Critical alerts", "Push and email when high pressure is detected.") { Enabled = true },
+        new PatientNotificationPreference("Clinician replies", "Instant notification when your clinician responds.") { Enabled = true },
+        new PatientNotificationPreference("Daily summary", "Evening recap of daily pressure and activity trends.") { Enabled = false }
+    };
+}
+

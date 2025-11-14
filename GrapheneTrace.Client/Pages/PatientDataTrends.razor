@@ -1,0 +1,181 @@
+@page "/patient/trends"
+@using GrapheneTrace.Client.Models
+
+<PageTitle>Pressure Trends</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6 patient-trends">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Data Analysis &amp; Trends</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Explore how your key metrics change over time and review past heatmap frames.
+            </MudText>
+        </div>
+        <MudSelect T="TimeRange" @bind-Value="_selectedRange" Variant="Variant.Outlined" Dense="true" Style="max-width: 220px;">
+            <MudSelectItem Value="@TimeRange.LastHour">Last 1 hour</MudSelectItem>
+            <MudSelectItem Value="@TimeRange.Last6Hours">Last 6 hours</MudSelectItem>
+            <MudSelectItem Value="@TimeRange.Last24Hours">Last 24 hours</MudSelectItem>
+            <MudSelectItem Value="@TimeRange.LastWeek">Last 7 days</MudSelectItem>
+        </MudSelect>
+    </MudStack>
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" lg="7">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Key Metric Trends</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">
+                        Data sampled every 15 minutes · Tap legend items to toggle.
+                    </MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudTabs Rounded="true">
+                        <MudTabPanel Text="Peak Pressure Index">
+                            <MudChart ChartType="ChartType.Line" XAxisLabels="@TrendLabels" ChartSeries="@PpiSeries" />
+                        </MudTabPanel>
+                        <MudTabPanel Text="Contact Area %">
+                            <MudChart ChartType="ChartType.Line" XAxisLabels="@TrendLabels" ChartSeries="@ContactAreaSeries" />
+                        </MudTabPanel>
+                    </MudTabs>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" lg="5">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudText Typo="Typo.h6">Heatmap Timeline</MudText>
+                        <MudChip T="string" Color="Color.Info">Frames stored: @_frames.Count</MudChip>
+                    </MudStack>
+                </MudCardHeader>
+                <MudCardContent>
+                    <div class="heatmap-grid small-grid">
+                        @foreach (var row in SelectedFrame.Values)
+                        {
+                            <div class="heatmap-row">
+                                @foreach (var value in row)
+                                {
+                                    <div class="heatmap-cell" style="--intensity:@value;"></div>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <MudSlider T="int"
+                               Min="0"
+                               Max="@(_frames.Count - 1)"
+                               Step="1"
+                               @bind-Value="_selectedFrameIndex"
+                               ValueLabel="true"
+                               Class="mt-4" />
+                    <MudText Typo="Typo.caption" Class="text-secondary mt-2">
+                        Selected frame: @(SelectedFrame.Timestamp.ToString("MMM d · HH:mm"))
+                    </MudText>
+                    <MudStack Spacing="1" Class="mt-3">
+                        <MudText Typo="Typo.subtitle1" Class="fw-semibold">Frame details</MudText>
+                        <MudText Typo="Typo.caption" Class="text-secondary">
+                            Highest pressure detected at right heel · frame stored automatically by the AI.
+                        </MudText>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Flag">
+                            Mark for clinician review
+                        </MudButton>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudCard Class="elevation-1 mt-4">
+        <MudCardHeader>
+            <MudText Typo="Typo.h6">Reports &amp; Downloads</MudText>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudGrid Spacing="2">
+                @foreach (var report in Reports)
+                {
+                    <MudItem xs="12" md="4">
+                        <MudPaper Class="pa-4 report-card" Elevation="2">
+                            <MudStack Spacing="1">
+                                <MudIcon Icon="@report.Icon" Color="Color.Primary" Size="Size.Medium" />
+                                <MudText Typo="Typo.subtitle1" Class="fw-semibold">@report.Title</MudText>
+                                <MudText Typo="Typo.caption" Class="text-secondary">Generated @report.GeneratedAt.ToString("MMM d · HH:mm")</MudText>
+                                <MudText Typo="Typo.body2">@report.Description</MudText>
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                                    @report.DownloadLabel
+                                </MudButton>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private readonly List<HeatMapFrame> _frames = new()
+    {
+        new HeatMapFrame(DateTime.Now.AddHours(-6), GenerateFrame(8)),
+        new HeatMapFrame(DateTime.Now.AddHours(-4), GenerateFrame(12)),
+        new HeatMapFrame(DateTime.Now.AddHours(-3), GenerateFrame(16)),
+        new HeatMapFrame(DateTime.Now.AddHours(-2), GenerateFrame(19)),
+        new HeatMapFrame(DateTime.Now.AddHours(-1), GenerateFrame(24)),
+        new HeatMapFrame(DateTime.Now.AddMinutes(-30), GenerateFrame(33))
+    };
+
+    private int _selectedFrameIndex = 4;
+
+    private TimeRange _selectedRange = TimeRange.Last6Hours;
+
+    private HeatMapFrame SelectedFrame => _frames[_selectedFrameIndex];
+
+    private readonly string[] TrendLabels = { "-6h", "-4h", "-3h", "-2h", "-1h", "Now" };
+
+    private readonly List<ChartSeries> PpiSeries = new()
+    {
+        new ChartSeries { Name = "Peak Pressure Index", Data = new double[] { 7.6, 8.4, 9.1, 9.7, 10.8, 11.3 } },
+        new ChartSeries { Name = "Baseline", Data = new double[] { 7.0, 7.0, 7.0, 7.0, 7.0, 7.0 } }
+    };
+
+    private readonly List<ChartSeries> ContactAreaSeries = new()
+    {
+        new ChartSeries { Name = "Contact Area %", Data = new double[] { 66, 64, 63, 62, 61, 60 } },
+        new ChartSeries { Name = "Comfort Range", Data = new double[] { 58, 58, 58, 58, 58, 58 } }
+    };
+
+    private readonly PatientReportSummary[] Reports =
+    {
+        new PatientReportSummary("Daily comparison", DateTime.Now.AddMinutes(-15), "Compares today's pressure exposure to yesterday's routine.", "Download PDF", Icons.Material.Filled.Article),
+        new PatientReportSummary("Weekly trend", DateTime.Now.AddHours(-3), "Summarises key metrics across the last 7 days.", "Download PDF", Icons.Material.Filled.Insights),
+        new PatientReportSummary("Last clinician summary", DateTime.Now.AddDays(-1), "Notes from last virtual review including personalised guidance.", "View notes", Icons.Material.Filled.NoteAlt)
+    };
+
+    private static IReadOnlyList<IReadOnlyList<int>> GenerateFrame(int seed)
+    {
+        var random = new Random(seed);
+        var rows = new List<IReadOnlyList<int>>(16);
+        for (var r = 0; r < 16; r++)
+        {
+            var row = new List<int>(16);
+            for (var c = 0; c < 16; c++)
+            {
+                var value = random.Next(10, 85);
+                if (r is > 9 and < 13 && c is > 5 and < 11)
+                {
+                    value = random.Next(70, 100);
+                }
+                row.Add(value);
+            }
+            rows.Add(row);
+        }
+        return rows;
+    }
+
+    private enum TimeRange
+    {
+        LastHour,
+        Last6Hours,
+        Last24Hours,
+        LastWeek
+    }
+}
+

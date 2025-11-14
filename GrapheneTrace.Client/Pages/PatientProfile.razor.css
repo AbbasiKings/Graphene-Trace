@@ -1,0 +1,9 @@
+.patient-profile .preference-card {
+    border-radius: 14px;
+    background-color: rgba(33, 150, 243, 0.08);
+}
+
+.patient-profile .mud-avatar {
+    box-shadow: 0 8px 18px rgba(33, 150, 243, 0.18);
+}
+

@@ -1,0 +1,32 @@
+.patient-trends .heatmap-grid {
+    display: grid;
+    grid-template-rows: repeat(16, 1fr);
+    gap: 2px;
+    padding: 10px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(21, 101, 192, 0.14) 0%, rgba(13, 71, 161, 0.24) 100%);
+}
+
+.patient-trends .heatmap-grid.small-grid {
+    padding: 8px;
+}
+
+.patient-trends .heatmap-row {
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 2px;
+}
+
+.patient-trends .heatmap-cell {
+    width: 100%;
+    padding-top: 100%;
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(76, 175, 80, calc(var(--intensity) / 120)), rgba(255, 235, 59, calc(var(--intensity) / 130)), rgba(244, 67, 54, calc(var(--intensity) / 140)));
+}
+
+.patient-trends .report-card {
+    height: 100%;
+    border-radius: 14px;
+    background: rgba(33, 150, 243, 0.08);
+}
+

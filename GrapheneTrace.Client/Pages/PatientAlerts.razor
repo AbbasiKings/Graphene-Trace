@@ -1,0 +1,141 @@
+@page "/patient/alerts"
+@using GrapheneTrace.Client.Models
+
+<PageTitle>Alerts & Communication</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6 patient-alerts">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Alerts &amp; Communication</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Review AI alerts, add your own notes, and keep the conversation flowing with your clinician.
+            </MudText>
+        </div>
+        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text">
+            New alerts: @(AlertHistory.Count(a => a.Status == "New"))
+        </MudChip>
+    </MudStack>
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" lg="6">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Alert History</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">
+                        Automatic alerts from the smart analysis engine.
+                    </MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudTable T="PatientAlertDigest" Items="AlertHistory" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Time</MudTh>
+                            <MudTh>Title</MudTh>
+                            <MudTh>Region</MudTh>
+                            <MudTh>Status</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Time">@context.Timestamp.ToString("MMM d · HH:mm")</MudTd>
+                            <MudTd DataLabel="Title">@context.Title</MudTd>
+                            <MudTd DataLabel="Region">@context.Region</MudTd>
+                            <MudTd DataLabel="Status">
+                                <MudChip T="string" Color="@context.StatusColor" Size="Size.Small">@context.Status</MudChip>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" lg="6">
+            <MudCard Class="elevation-2 h-100">
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Log a New Comment</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudForm>
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" md="6">
+                                <MudTextField @bind-Value="_commentTimestamp"
+                                              Variant="Variant.Outlined"
+                                              Label="Time of discomfort"
+                                              Placeholder="e.g. 19:05 evening walk" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudSelect T="string" @bind-Value="_commentRegion" Variant="Variant.Outlined" Label="Foot region">
+                                    <MudSelectItem Value="@string.Empty">Select region</MudSelectItem>
+                                    <MudSelectItem Value="@("Heel")">Heel</MudSelectItem>
+                                    <MudSelectItem Value="@("Midfoot")">Midfoot</MudSelectItem>
+                                    <MudSelectItem Value="@("ToeArea")">Toe area</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                        </MudGrid>
+                        <MudTextField @bind-Value="_commentBody"
+                                      Variant="Variant.Outlined"
+                                      Lines="4"
+                                      Label="Describe what you felt"
+                                      Placeholder="Share what you were doing and how it felt."
+                                      Class="mt-3" />
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Send"
+                                   Disabled="string.IsNullOrWhiteSpace(_commentBody)"
+                                   Class="mt-3">
+                            Submit Comment
+                        </MudButton>
+                    </MudForm>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudCard Class="elevation-1 mt-4">
+        <MudCardHeader>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.h6">Conversation with @Thread.ClinicianName</MudText>
+                <MudChip T="string" Color="Color.Success">Response time: under 6h</MudChip>
+            </MudStack>
+        </MudCardHeader>
+        <MudCardContent>
+            <div class="conversation-body">
+                @foreach (var message in Thread.Messages)
+                {
+                    <div class="message @(message.IsClinician ? "from-clinician" : "from-patient")">
+                        <MudPaper Class="message-bubble" Elevation="1">
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.caption" Class="text-secondary">
+                                    @(message.IsClinician ? "Clinician" : "You") · @message.Timestamp.ToString("MMM d · HH:mm")
+                                </MudText>
+                                <MudText Typo="Typo.body2">@message.Body</MudText>
+                            </MudStack>
+                        </MudPaper>
+                    </div>
+                }
+            </div>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private readonly IReadOnlyList<PatientAlertDigest> AlertHistory = new[]
+    {
+        new PatientAlertDigest(Guid.NewGuid(), DateTime.Now.AddMinutes(-18), "High pressure during walk", "Right heel", "New", Color.Error),
+        new PatientAlertDigest(Guid.NewGuid(), DateTime.Now.AddHours(-3), "Sustained load detected", "Midfoot", "Acknowledged", Color.Warning),
+        new PatientAlertDigest(Guid.NewGuid(), DateTime.Now.AddHours(-8), "Improved distribution", "Full foot", "Resolved", Color.Success),
+        new PatientAlertDigest(Guid.NewGuid(), DateTime.Now.AddDays(-1), "Evening discomfort note", "Toe area", "Resolved", Color.Success)
+    };
+
+    private readonly PatientMessageThread Thread = new(
+        Guid.NewGuid(),
+        "Dr. Harper Diaz",
+        new List<PatientMessage>
+        {
+            new PatientMessage(Guid.NewGuid(), "Patient", DateTime.Now.AddHours(-12), "Felt a sharp spot on heel during walk.", false),
+            new PatientMessage(Guid.NewGuid(), "Clinician", DateTime.Now.AddHours(-11.5), "Thanks for logging it. Monitor tonight and use offloading insert.", true),
+            new PatientMessage(Guid.NewGuid(), "Patient", DateTime.Now.AddHours(-2), "Used the insert. Pressure felt lower but heel still warm.", false),
+            new PatientMessage(Guid.NewGuid(), "Clinician", DateTime.Now.AddHours(-1.5), "Great. I'll review today's data and follow up tomorrow morning.", true)
+        });
+
+    private string _commentTimestamp = DateTime.Now.ToString("HH:mm");
+    private string _commentRegion = string.Empty;
+    private string _commentBody = string.Empty;
+}
+
