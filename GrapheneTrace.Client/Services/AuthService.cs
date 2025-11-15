@@ -1,101 +1,92 @@
-﻿using GrapheneTrace.Core.DataTransferObjects;
+﻿using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using GrapheneTrace.Core.DTOs.Auth;
 using GrapheneTrace.Core.Enums;
 
-namespace GrapheneTrace.Client.Services
+namespace GrapheneTrace.Client.Services;
+
+public class AuthService
 {
-    public class AuthService
+    private readonly HttpClient _httpClient;
+
+    private bool _isAuthenticated;
+    private UserRole? _role;
+    private string? _userEmail;
+    private string? _userName;
+    private string? _token;
+
+    public AuthService(HttpClient httpClient)
     {
-        private bool _isAuthenticated = false;
-        private UserRole? _role = null;
-        private string? _userEmail = null;
-        private string? _userName = null;
-        private string? _token = null;
+        _httpClient = httpClient;
+    }
 
-        public bool IsAuthenticated => _isAuthenticated;
-        public UserRole? Role => _role;
-        public string? UserEmail => _userEmail;
-        public string? UserName => _userName;
-        public string? Token => _token;
+    public bool IsAuthenticated => _isAuthenticated;
+    public UserRole? Role => _role;
+    public string? UserEmail => _userEmail;
+    public string? UserName => _userName;
+    public string? Token => _token;
 
-        public event Action? AuthenticationStateChanged;
+    public event Action? AuthenticationStateChanged;
 
-        public async Task<LoginResponseDto> LoginAsync(LoginRequestDto requestDto)
+    public async Task<LoginResponseDto> LoginAsync(LoginRequestDto requestDto)
+    {
+        try
         {
-            await Task.Delay(100);
-
-            var response = requestDto.Email.ToLower() switch
+            var response = await _httpClient.PostAsJsonAsync("api/auth/login", requestDto);
+            var payload = await response.Content.ReadFromJsonAsync<LoginResponseDto>() ?? new LoginResponseDto
             {
-                "admin@gmail.com" when requestDto.Password == "admin123" => new LoginResponseDto
-                {
-                    Status = true,
-                    Message = "Login successful",
-                    Token = "mock-jwt-token-admin",
-                    Role = UserRole.Admin,
-                    UserName = "Admin User"
-                },
-                "clinician@gmail.com" when requestDto.Password == "clinician123" => new LoginResponseDto
-                {
-                    Status = true,
-                    Message = "Login successful",
-                    Token = "mock-jwt-token-clinician",
-                    Role = UserRole.Clinician,
-                    UserName = "Clinician User"
-                },
-                "patient@gmail.com" when requestDto.Password == "patient123" => new LoginResponseDto
-                {
-                    Status = true,
-                    Message = "Login successful",
-                    Token = "mock-jwt-token-patient",
-                    Role = UserRole.Patient,
-                    UserName = "Patient User"
-                },
-                _ => new LoginResponseDto
-                {
-                    Status = false,
-                    Message = "Invalid email or password.",
-                    Token = string.Empty,
-                    Role = UserRole.Patient,
-                    UserName = string.Empty
-                }
+                Status = false,
+                Message = "Unexpected response from server."
             };
 
-            if (response.Status)
+            if (response.IsSuccessStatusCode && payload.Status)
             {
-                SetAuthenticationState(requestDto.Email, response.Role, response.UserName, response.Token);
+                SetAuthenticationState(requestDto.Email, payload.Role, payload.UserName, payload.Token);
+            }
+            else
+            {
+                payload.Status = false;
+                payload.Message = !string.IsNullOrWhiteSpace(payload.Message)
+                    ? payload.Message
+                    : "Invalid email or password.";
             }
 
-            return response;
+            return payload;
         }
-
-        private void SetAuthenticationState(string email, UserRole role, string userName, string token)
+        catch (Exception)
         {
-            _isAuthenticated = true;
-            _userEmail = email;
-            _role = role;
-            _userName = userName;
-            _token = token;
-            AuthenticationStateChanged?.Invoke();
-        }
-
-        public void Logout()
-        {
-            _isAuthenticated = false;
-            _userEmail = null;
-            _role = null;
-            _userName = null;
-            _token = null;
-            AuthenticationStateChanged?.Invoke();
-        }
-
-        public bool HasRole(UserRole role)
-        {
-            return _isAuthenticated && _role == role;
-        }
-
-        public bool HasAnyRole(params UserRole[] roles)
-        {
-            return _isAuthenticated && _role.HasValue && roles.Contains(_role.Value);
+            return new LoginResponseDto
+            {
+                Status = false,
+                Message = "Unable to reach GrapheneTrace API. Please verify the backend is running."
+            };
         }
     }
-}
 
+    private void SetAuthenticationState(string email, UserRole role, string userName, string token)
+    {
+        _isAuthenticated = true;
+        _userEmail = email;
+        _role = role;
+        _userName = userName;
+        _token = token;
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        AuthenticationStateChanged?.Invoke();
+    }
+
+    public void Logout()
+    {
+        _isAuthenticated = false;
+        _userEmail = null;
+        _role = null;
+        _userName = null;
+        _token = null;
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+        AuthenticationStateChanged?.Invoke();
+    }
+
+    public bool HasRole(UserRole role) => _isAuthenticated && _role == role;
+
+    public bool HasAnyRole(params UserRole[] roles)
+        => _isAuthenticated && _role.HasValue && roles.Contains(_role.Value);
+}

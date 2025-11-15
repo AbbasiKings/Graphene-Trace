@@ -1,156 +1,249 @@
 ﻿@page "/patient/dashboard"
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Core.DTOs.Patient
+@using GrapheneTrace.Core.Enums
+@inject HttpClient Http
 
-<PageTitle>Patient Dashboard</PageTitle>
+@if (_loading)
+{
+    <div class="d-flex justify-center my-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(_loadError))
+{
+    <MudAlert Severity="Severity.Error">@_loadError</MudAlert>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-6 patient-dashboard">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+            <div>
+                <MudText Typo="Typo.h4" Class="fw-bold">Today's Foot Health</MudText>
+                <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                    Monitor live pressure visuals, stay aware of alerts, and message your clinician with one tap.
+                </MudText>
+                <MudText Typo="Typo.caption" Class="text-secondary">
+                    Last cloud sync: @(_dashboard?.LastFrameTimestamp?.ToLocalTime().ToString("MMM d · HH:mm:ss") ?? "—")
+                </MudText>
+            </div>
+            <MudChip T="string" Color="Color.Success" Variant="Variant.Text">
+                Connected · Sensor Pack v3
+            </MudChip>
+        </MudStack>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="pa-6 patient-dashboard">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
-        <div>
-            <MudText Typo="Typo.h4" Class="fw-bold">Today's Foot Health</MudText>
-            <MudText Typo="Typo.subtitle2" Class="text-secondary">
-                Monitor live pressure visuals, stay aware of alerts, and message your clinician with one tap.
-            </MudText>
-        </div>
-        <MudChip T="string" Color="Color.Success" Variant="Variant.Text">
-            Connected · Sensor Pack v3
-        </MudChip>
-    </MudStack>
+        <MudGrid Spacing="2" Class="mb-4">
+            @foreach (var card in RiskCards)
+            {
+                <MudItem xs="12" md="6" lg="3">
+                    <MudCard Class="elevation-2 h-100 risk-card">
+                        <MudCardContent>
+                            <MudStack Spacing="1">
+                                <MudIcon Icon="@card.Icon" Color="@card.CardColor" Size="Size.Large" />
+                                <MudText Typo="Typo.overline" Class="text-secondary">@card.Title</MudText>
+                                <MudText Typo="Typo.h4" Class="fw-semibold">@card.Value</MudText>
+                                <MudText Typo="Typo.caption">@card.Context</MudText>
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
 
-    <MudGrid Spacing="2" Class="mb-4">
-        @foreach (var card in RiskCards)
-        {
-            <MudItem xs="12" md="6" lg="3">
-                <MudCard Class="elevation-2 h-100 risk-card">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" lg="7">
+                <MudCard Class="elevation-2 h-100">
+                    <MudCardHeader>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudStack>
+                                <MudText Typo="Typo.h6">Live Foot Pressure Map</MudText>
+                                <MudText Typo="Typo.caption" Class="text-secondary">
+                                    Last synced @(LiveFrame.Timestamp.ToString("HH:mm:ss")) · Colors shift with pressure intensity.
+                                </MudText>
+                            </MudStack>
+                            <MudChip T="string" Color="Color.Warning" Variant="Variant.Filled" Class="fw-semibold">
+                                Current Risk: @CurrentRisk
+                            </MudChip>
+                        </MudStack>
+                    </MudCardHeader>
                     <MudCardContent>
-                        <MudStack Spacing="1">
-                            <MudIcon Icon="@card.Icon" Color="@card.CardColor" Size="Size.Large" />
-                            <MudText Typo="Typo.overline" Class="text-secondary">@card.Title</MudText>
-                            <MudText Typo="Typo.h4" Class="fw-semibold">@card.Value</MudText>
-                            <MudText Typo="Typo.caption">@card.Context</MudText>
+                        <div class="heatmap-grid">
+                            @foreach (var row in LiveFrame.Values)
+                            {
+                                <div class="heatmap-row">
+                                    @foreach (var value in row)
+                                    {
+                                        <div class="heatmap-cell" style="--intensity:@value;"></div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mt-3">
+                            <MudText Typo="Typo.caption" Class="text-secondary">Next sensor refresh in 28s</MudText>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="async () => await LoadDashboardAsync()">
+                                Manual Refresh
+                            </MudButton>
                         </MudStack>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
-        }
-    </MudGrid>
-
-    <MudGrid Spacing="2">
-        <MudItem xs="12" lg="7">
-            <MudCard Class="elevation-2 h-100">
-                <MudCardHeader>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                        <MudStack>
-                            <MudText Typo="Typo.h6">Live Foot Pressure Map</MudText>
-                            <MudText Typo="Typo.caption" Class="text-secondary">
-                                Last synced @(LiveFrame.Timestamp.ToString("HH:mm:ss")) · Colors shift with pressure intensity.
-                            </MudText>
-                        </MudStack>
-                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Filled" Class="fw-semibold">
-                            Current Risk: @CurrentRisk
-                        </MudChip>
-                    </MudStack>
-                </MudCardHeader>
-                <MudCardContent>
-                    <div class="heatmap-grid">
-                        @foreach (var row in LiveFrame.Values)
-                        {
-                            <div class="heatmap-row">
-                                @foreach (var value in row)
-                                {
-                                    <div class="heatmap-cell" style="--intensity:@value;"></div>
-                                }
-                            </div>
-                        }
-                    </div>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mt-3">
-                        <MudText Typo="Typo.caption" Class="text-secondary">Next sensor refresh in 28s</MudText>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh">
-                            Manual Refresh
-                        </MudButton>
-                    </MudStack>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-        <MudItem xs="12" lg="5">
-            <MudCard Class="elevation-2 h-100">
-                <MudCardHeader>
-                    <MudText Typo="Typo.h6">Quick Health Summary</MudText>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudList T="PatientMetricSnapshot" Dense="true">
-                        @foreach (var metric in MetricSnapshots)
-                        {
-                            <MudListItem T="PatientMetricSnapshot">
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="w-100">
-                                    <MudIcon Icon="@metric.Icon" Color="@metric.TrendColor" />
-                                    <MudStack>
-                                        <MudText Typo="Typo.body2">@metric.Label</MudText>
-                                        <MudText Typo="Typo.subtitle2" Class="fw-semibold">@metric.Value</MudText>
+            <MudItem xs="12" lg="5">
+                <MudCard Class="elevation-2 h-100">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Quick Health Summary</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudList T="PatientMetricSnapshot" Dense="true">
+                            @foreach (var metric in MetricSnapshots)
+                            {
+                                <MudListItem T="PatientMetricSnapshot">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="w-100">
+                                        <MudIcon Icon="@metric.Icon" Color="@metric.TrendColor" />
+                                        <MudStack>
+                                            <MudText Typo="Typo.body2">@metric.Label</MudText>
+                                            <MudText Typo="Typo.subtitle2" Class="fw-semibold">@metric.Value</MudText>
+                                        </MudStack>
+                                        <MudText Typo="Typo.caption" Color="@metric.TrendColor" Class="ms-auto">@metric.TrendLabel</MudText>
                                     </MudStack>
-                                    <MudText Typo="Typo.caption" Color="@metric.TrendColor" Class="ms-auto">@metric.TrendLabel</MudText>
+                                </MudListItem>
+                            }
+                        </MudList>
+                        <MudDivider Class="my-3" />
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.subtitle1" Class="fw-semibold">Latest Alerts & Messages</MudText>
+                            <MudPaper Class="pa-3 alert-card" Elevation="1">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Class="text-secondary">
+                                        @(DisplayAlert.Timestamp.ToString("MMM d · HH:mm"))
+                                    </MudText>
+                                    <MudText Typo="Typo.body1" Class="fw-semibold">
+                                        @DisplayAlert.Title
+                                    </MudText>
+                                    <MudText Typo="Typo.caption">Status: @DisplayAlert.Status</MudText>
                                 </MudStack>
-                            </MudListItem>
-                        }
-                    </MudList>
-                    <MudDivider Class="my-3" />
-                    <MudStack Spacing="1">
-                        <MudText Typo="Typo.subtitle1" Class="fw-semibold">Latest Alerts & Messages</MudText>
-                        <MudPaper Class="pa-3 alert-card" Elevation="1">
-                            <MudStack Spacing="1">
-                                <MudText Typo="Typo.caption" Class="text-secondary">
-                                    @(LatestAlert.Timestamp.ToString("MMM d · HH:mm"))
-                                </MudText>
-                                <MudText Typo="Typo.body1" Class="fw-semibold">
-                                    @LatestAlert.Title
-                                </MudText>
-                                <MudText Typo="Typo.caption">Region flagged: @LatestAlert.Region</MudText>
-                            </MudStack>
-                        </MudPaper>
-                        <MudPaper Class="pa-3 message-card" Elevation="1">
-                            <MudStack Spacing="1">
-                                <MudText Typo="Typo.caption" Class="text-secondary">
-                                    Clinician reply · @(LatestClinicianMessage.Timestamp.ToString("MMM d · HH:mm"))
-                                </MudText>
-                                <MudText Typo="Typo.body2">@LatestClinicianMessage.Body</MudText>
-                            </MudStack>
-                        </MudPaper>
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.NoteAdd">
-                            Log New Discomfort
-                        </MudButton>
-                    </MudStack>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-    </MudGrid>
-</MudContainer>
+                            </MudPaper>
+                            <MudPaper Class="pa-3 message-card" Elevation="1">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Class="text-secondary">
+                                        Clinician reply · @(LatestClinicianMessage.Timestamp.ToString("MMM d · HH:mm"))
+                                    </MudText>
+                                    <MudText Typo="Typo.body2">@LatestClinicianMessage.Body</MudText>
+                                </MudStack>
+                            </MudPaper>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.NoteAdd">
+                                Log New Discomfort
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </MudContainer>
+}
+
+<PageTitle>Patient Dashboard</PageTitle>
 
 @code {
-    private readonly PatientRiskCard[] RiskCards =
+    private List<PatientRiskCard> RiskCards { get; set; } = new()
     {
         new PatientRiskCard("Overall Status", "Monitor", "AI suggests lighter activity for the next hour", Color.Warning, Icons.Material.Filled.HealthAndSafety),
         new PatientRiskCard("Peak Pressure Index", "11.3", "High point occurred during 18:05 walk", Color.Secondary, Icons.Material.Filled.Speed),
         new PatientRiskCard("Contact Area %", "60%", "Within personalised range", Color.Success, Icons.Material.Filled.DonutLarge),
-        new PatientRiskCard("Unread Messages", "1", "Clinician replied 12 minutes ago", Color.Info, Icons.Material.Filled.MarkChatUnread)
+        new PatientRiskCard("Unread Alerts", "1", "Clinician replied 12 minutes ago", Color.Info, Icons.Material.Filled.MarkChatUnread)
     };
 
-    private readonly PatientMetricSnapshot[] MetricSnapshots =
+    private List<PatientMetricSnapshot> MetricSnapshots { get; set; } = new()
     {
         new PatientMetricSnapshot("Heel Pressure", "+24%", "↑ Slight increase vs baseline", Color.Warning, Icons.Material.Filled.SensorOccupied),
         new PatientMetricSnapshot("Daily Steps", "4,182", "On track for today", Color.Success, Icons.Material.Filled.DirectionsWalk),
         new PatientMetricSnapshot("Device Battery", "82%", "Approx. 18 hours left", Color.Info, Icons.Material.Filled.BatteryStd)
     };
 
-    private readonly HeatMapFrame LiveFrame = new(DateTime.Now,
+    private HeatMapFrame LiveFrame { get; set; } = new(DateTime.Now,
         GenerateFrame(seed: 17));
 
-    private readonly PatientAlertDigest LatestAlert = new(Guid.NewGuid(), DateTime.Now.AddMinutes(-14),
+    private PatientAlertDigest? LatestAlert { get; set; } = new(Guid.NewGuid(), DateTime.Now.AddMinutes(-14),
         "High pressure detected during evening walk", "Right heel", "New", Color.Error);
 
-    private readonly PatientMessage LatestClinicianMessage = new(Guid.NewGuid(), "Dr Harper" ,
+    private readonly PatientMessage LatestClinicianMessage = new(Guid.NewGuid(), "Dr Harper",
         DateTime.Now.AddMinutes(-12), "Thanks for flagging the discomfort. Please use the offloading insole tonight and log how it feels tomorrow morning.", true);
 
-    private string CurrentRisk => "Monitor"; // In a real app fetched from service
+    private string CurrentRisk { get; set; } = "Monitor";
+    private bool _loading = true;
+    private string? _loadError;
+    private PatientDashboardDto? _dashboard;
 
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        try
+        {
+            _loading = true;
+            _loadError = null;
+            StateHasChanged();
+
+            _dashboard = await Http.GetFromJsonAsync<PatientDashboardDto>("api/patient/dashboard");
+            if (_dashboard is not null)
+            {
+                HydrateFromDashboard(_dashboard);
+            }
+        }
+        catch (Exception)
+        {
+            _loadError = "Real-time patient metrics could not be loaded. Please ensure the backend API is running.";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void HydrateFromDashboard(PatientDashboardDto dashboard)
+    {
+        CurrentRisk = dashboard.CurrentRiskLevel.ToString();
+        var timestampLabel = dashboard.LastFrameTimestamp?.ToLocalTime().ToString("MMM d · HH:mm") ?? "Awaiting first upload";
+
+        RiskCards = new()
+        {
+            new PatientRiskCard("Overall Status", CurrentRisk, $"Updated {timestampLabel}", ResolveRiskColor(dashboard.CurrentRiskLevel), Icons.Material.Filled.HealthAndSafety),
+            new PatientRiskCard("Peak Pressure Index", dashboard.PeakPressureIndex.ToString("F1"), "Latest processed frame", Color.Secondary, Icons.Material.Filled.Speed),
+            new PatientRiskCard("Contact Area %", $"{dashboard.ContactAreaPercent:F1}%", "Live plantar coverage", Color.Success, Icons.Material.Filled.DonutLarge),
+            new PatientRiskCard("Active Alerts", dashboard.ActiveAlerts.Count.ToString(), "AI + clinician items", Color.Info, Icons.Material.Filled.MarkChatUnread)
+        };
+
+        MetricSnapshots = new()
+        {
+            new PatientMetricSnapshot("Heel Pressure", $"{dashboard.PeakPressureIndex:F1}", "Peak pressure index", ResolveRiskColor(dashboard.CurrentRiskLevel), Icons.Material.Filled.SensorOccupied),
+            new PatientMetricSnapshot("Contact Coverage", $"{dashboard.ContactAreaPercent:F1}%", "Surface in optimal zone", Color.Success, Icons.Material.Filled.DonutLarge),
+            new PatientMetricSnapshot("Alert Queue", $"{dashboard.ActiveAlerts.Count}", "Items needing review", Color.Info, Icons.Material.Filled.WarningAmber)
+        };
+
+        if (dashboard.ActiveAlerts.Count > 0)
+        {
+            var latest = dashboard.ActiveAlerts.OrderByDescending(a => a.CreatedAt).First();
+            LatestAlert = new PatientAlertDigest(latest.AlertId, latest.CreatedAt, latest.Reason, "Pressure Sensor", latest.Status.ToString(), ResolveRiskColor(latest.RiskLevel));
+        }
+
+        if (dashboard.LastFrameTimestamp.HasValue)
+        {
+            LiveFrame = new HeatMapFrame(dashboard.LastFrameTimestamp.Value.ToLocalTime(), GenerateFrame(seed: dashboard.LastFrameTimestamp.Value.Second + 10));
+        }
+    }
+
+    private PatientAlertDigest DisplayAlert => LatestAlert ?? new PatientAlertDigest(Guid.Empty, DateTime.Now, "No alerts in queue", "All Regions", "Clear", Color.Success);
+
+    private static Color ResolveRiskColor(RiskLevel level) => level switch
+    {
+        RiskLevel.Critical => Color.Error,
+        RiskLevel.High => Color.Warning,
+        RiskLevel.Medium => Color.Info,
+        _ => Color.Success
+    };
     private static IReadOnlyList<IReadOnlyList<int>> GenerateFrame(int seed)
     {
         var random = new Random(seed);
