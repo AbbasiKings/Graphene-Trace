@@ -4,6 +4,8 @@ namespace GrapheneTrace.Core.Models;
 
 public class Alert : BaseEntity
 {
+    public Guid PatientId { get; set; }
+    public User Patient { get; set; } = default!;
     public Guid PatientDataId { get; set; }
     public PatientData PatientData { get; set; } = default!;
     public RiskLevel RiskLevel { get; set; } = RiskLevel.Low;

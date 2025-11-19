@@ -1,80 +1,112 @@
 ﻿@page "/clinician/dashboard"
 @using GrapheneTrace.Client.Services
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Core.DTOs.Clinician
+@using GrapheneTrace.Core.Enums
 @inject AuthService AuthService
+@inject HttpClient Http
+@inject AppToastService ToastService
 
 <PageTitle>Clinician Dashboard</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
-        <div>
-            <MudText Typo="Typo.h4" Class="fw-bold">Triage Overview</MudText>
-            <MudText Typo="Typo.subtitle2" Class="text-secondary">
-                Monitor urgent alerts, high-risk patients, and system health in real time.
-            </MudText>
-        </div>
-        <MudChip T="string" Color="Color.Primary">
-            @AuthService.UserName (@AuthService.UserEmail)
-        </MudChip>
-    </MudStack>
+@if (_loading)
+{
+    <div class="d-flex justify-center my-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(_loadError))
+{
+    <MudAlert Severity="Severity.Error">@_loadError</MudAlert>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+            <div>
+                <MudText Typo="Typo.h4" Class="fw-bold">Triage Overview</MudText>
+                <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                    Monitor urgent alerts, high-risk patients, and system health in real time.
+                </MudText>
+            </div>
+            <MudChip T="string" Color="Color.Primary">
+                @AuthService.UserName (@AuthService.UserEmail)
+            </MudChip>
+        </MudStack>
 
-    <MudGrid Class="mb-6">
-        @foreach (var card in AlertCards)
-        {
-            <MudItem xs="12" md="6" lg="3">
-                <MudCard Class="elevation-2 h-100">
-                    <MudCardContent>
-                        <MudStack Spacing="1">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                <MudText Typo="Typo.subtitle2" Class="text-secondary">@card.Title</MudText>
-                                <MudIcon Icon="@card.Icon" Color="@card.IconColor" />
+        <MudGrid Class="mb-6">
+            @foreach (var card in AlertCards)
+            {
+                <MudItem xs="12" md="6" lg="3">
+                    <MudCard Class="elevation-2 h-100">
+                        <MudCardContent>
+                            <MudStack Spacing="1">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.subtitle2" Class="text-secondary">@card.Title</MudText>
+                                    <MudIcon Icon="@card.Icon" Color="@card.IconColor" />
+                                </MudStack>
+                                <MudText Typo="Typo.h4" Class="fw-semibold">@card.Value</MudText>
+                                <MudText Typo="Typo.caption" Color="@card.TrendColor">@card.Trend</MudText>
                             </MudStack>
-                            <MudText Typo="Typo.h4" Class="fw-semibold">@card.Value</MudText>
-                            <MudText Typo="Typo.caption" Color="@card.TrendColor">@card.Trend</MudText>
-                        </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+
+        <MudGrid Spacing="2" Class="mb-6">
+            <MudItem xs="12" lg="7">
+                <MudCard Class="elevation-2 h-100">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">High-Risk Patients</MudText>
+                        <MudText Typo="Typo.caption" Class="text-secondary">
+                            Prioritised by last alert severity and recency.
+                        </MudText>
+                    </MudCardHeader>
+                    <MudCardContent Class="pt-0">
+                        @if (_triagePatients.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="text-secondary">No patients assigned yet.</MudText>
+                        }
+                        else
+                        {
+                            <MudTable T="TriagePatientDto" Items="@_triagePatients" Dense="true" Hover="true">
+                                <HeaderContent>
+                                    <MudTh>Patient</MudTh>
+                                    <MudTh>Risk</MudTh>
+                                    <MudTh>New Alerts</MudTh>
+                                    <MudTh>New Comments</MudTh>
+                                    <MudTh>Last Data</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Patient">
+                                        <MudText Typo="Typo.body2" Class="fw-semibold">@context.PatientName</MudText>
+                                        <MudText Typo="Typo.caption" Class="text-secondary">@context.PatientId.ToString("N")[..8]</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Risk">
+                                        <MudChip T="string" Color="@GetRiskColor(context.HighestRisk)" Size="Size.Small">@context.HighestRisk</MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="New Alerts">
+                                        <MudBadge Content="@context.NewAlertCount" Color="Color.Error" Overlap="true">
+                                            <MudText Typo="Typo.body2">@context.NewAlertCount</MudText>
+                                        </MudBadge>
+                                    </MudTd>
+                                    <MudTd DataLabel="New Comments">
+                                        <MudBadge Content="@context.NewCommentCount" Color="Color.Info" Overlap="true">
+                                            <MudText Typo="Typo.body2">@context.NewCommentCount</MudText>
+                                        </MudBadge>
+                                    </MudTd>
+                                    <MudTd DataLabel="Last Data">
+                                        <MudText Typo="Typo.caption" Class="text-secondary">
+                                            @(context.LastDataReceived?.ToLocalTime().ToString("MMM d · HH:mm") ?? "No data")
+                                        </MudText>
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
                     </MudCardContent>
                 </MudCard>
             </MudItem>
-        }
-    </MudGrid>
-
-    <MudGrid Spacing="2" Class="mb-6">
-        <MudItem xs="12" lg="7">
-            <MudCard Class="elevation-2 h-100">
-                <MudCardHeader>
-                    <MudText Typo="Typo.h6">High-Risk Patients</MudText>
-                    <MudText Typo="Typo.caption" Class="text-secondary">
-                        Prioritised by last alert severity and recency.
-                    </MudText>
-                </MudCardHeader>
-                <MudCardContent Class="pt-0">
-                    <MudTable T="ClinicianRiskPatient" Items="@HighRiskPatients" Dense="true" Hover="true">
-                        <HeaderContent>
-                            <MudTh>Patient</MudTh>
-                            <MudTh>Risk</MudTh>
-                            <MudTh>Last Alert</MudTh>
-                            <MudTh>Status</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Patient">
-                                <MudText Typo="Typo.body2" Class="fw-semibold">@context.PatientId</MudText>
-                                <MudText Typo="Typo.caption" Class="text-secondary">@context.Name</MudText>
-                            </MudTd>
-                            <MudTd DataLabel="Risk">
-                                <MudChip T="string" Color="@context.RiskColor" Size="Size.Small">@context.RiskLevel</MudChip>
-                            </MudTd>
-                            <MudTd DataLabel="Last Alert">
-                                <MudText Typo="Typo.body2">@context.LastAlertSummary</MudText>
-                                <MudText Typo="Typo.caption" Class="text-secondary">@context.LastAlertAt.ToString("g")</MudText>
-                            </MudTd>
-                            <MudTd DataLabel="Status">
-                                <MudText Typo="Typo.caption">@context.SensorStatus</MudText>
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
         <MudItem xs="12" lg="5">
             <MudCard Class="elevation-2 h-100">
                 <MudCardHeader>
@@ -137,33 +169,70 @@
             </MudTimeline>
         </MudCardContent>
     </MudCard>
-</MudContainer>
+    </MudContainer>
+}
 
 @code {
-    private IReadOnlyList<ClinicianAlertCard> AlertCards { get; } = new[]
-    {
-        new ClinicianAlertCard("New High-Pressure Alerts", "8", "2 escalated in the last hour", Color.Warning, Icons.Material.Filled.WarningAmber, Color.Warning),
-        new ClinicianAlertCard("Pending Patient Comments", "5", "3 awaiting reply", Color.Info, Icons.Material.Filled.MarkUnreadChatAlt, Color.Info),
-        new ClinicianAlertCard("Patients Monitored", "42", "+4 compared to yesterday", Color.Success, Icons.Material.Filled.Groups, Color.Primary),
-        new ClinicianAlertCard("AI Risk Reassessed", "16", "Updated since midnight", Color.Secondary, Icons.Material.Filled.AutoAwesome, Color.Secondary)
-    };
-
-    private IReadOnlyList<ClinicianRiskPatient> HighRiskPatients { get; } = new[]
-    {
-        new ClinicianRiskPatient("PT-71E66AB3", "Amelia Preston", "Critical", Color.Error, "Peak pressure 27% above baseline", DateTime.Now.AddMinutes(-12), "Sensor streaming"),
-        new ClinicianRiskPatient("PT-19AA72F1", "Noah Sullivan", "High", Color.Warning, "Recurring heel hotspot detected", DateTime.Now.AddMinutes(-33), "Sensor streaming"),
-        new ClinicianRiskPatient("PT-5FF9AA21", "Ella Martinez", "Moderate", Color.Info, "Flagged discomfort during walk", DateTime.Now.AddMinutes(-58), "Awaiting comment"),
-        new ClinicianRiskPatient("PT-5522201B", "Logan Pierce", "High", Color.Warning, "Alert resolved - monitor for 6h", DateTime.Now.AddHours(-2), "In review"),
-        new ClinicianRiskPatient("PT-90CC1144", "Harper Diaz", "Moderate", Color.Info, "Stable - last alert 7h ago", DateTime.Now.AddHours(-7), "Sensor paused")
-    };
-
+    private bool _loading = true;
+    private string? _loadError;
+    private List<TriagePatientDto> _triagePatients = new();
+    private List<ClinicianAlertCard> AlertCards { get; set; } = new();
     private IReadOnlyList<TimelineMarker> TimelineEntries { get; } = new[]
     {
-        new TimelineMarker(DateTime.Now.AddMinutes(-8), "Reviewed PT-71E66AB3 alert and initiated outreach", Color.Warning),
-        new TimelineMarker(DateTime.Now.AddMinutes(-21), "Responded to patient comment on PT-5FF9AA21", Color.Info),
-        new TimelineMarker(DateTime.Now.AddMinutes(-44), "AI recalculated risk tiers for 16 patients", Color.Success),
-        new TimelineMarker(DateTime.Now.AddHours(-2), "Downloaded comparative report for PT-19AA72F1", Color.Secondary),
-        new TimelineMarker(DateTime.Now.AddHours(-5), "Resolved alert on PT-5522201B after follow-up", Color.Success)
+        new TimelineMarker(DateTime.Now.AddMinutes(-8), "Reviewed patient alert and initiated outreach", Color.Warning),
+        new TimelineMarker(DateTime.Now.AddMinutes(-21), "Responded to patient comment", Color.Info),
+        new TimelineMarker(DateTime.Now.AddMinutes(-44), "AI recalculated risk tiers", Color.Success),
+        new TimelineMarker(DateTime.Now.AddHours(-2), "Downloaded comparative report", Color.Secondary),
+        new TimelineMarker(DateTime.Now.AddHours(-5), "Resolved alert after follow-up", Color.Success)
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTriageDataAsync();
+    }
+
+    private async Task LoadTriageDataAsync()
+    {
+        try
+        {
+            _loading = true;
+            _loadError = null;
+            StateHasChanged();
+
+            _triagePatients = (await Http.GetFromJsonAsync<List<TriagePatientDto>>("api/clinician/triage")) ?? new();
+
+            // Calculate summary metrics from triage data
+            var totalNewAlerts = _triagePatients.Sum(p => p.NewAlertCount);
+            var totalNewComments = _triagePatients.Sum(p => p.NewCommentCount);
+            var totalPatients = _triagePatients.Count;
+            var highRiskCount = _triagePatients.Count(p => p.HighestRisk >= RiskLevel.High);
+
+            AlertCards = new List<ClinicianAlertCard>
+            {
+                new ClinicianAlertCard("New High-Pressure Alerts", totalNewAlerts.ToString(), $"{highRiskCount} high-risk patients", Color.Warning, Icons.Material.Filled.WarningAmber, Color.Warning),
+                new ClinicianAlertCard("Pending Patient Comments", totalNewComments.ToString(), "Awaiting clinician reply", Color.Info, Icons.Material.Filled.MarkUnreadChatAlt, Color.Info),
+                new ClinicianAlertCard("Patients Monitored", totalPatients.ToString(), "Assigned to you", Color.Success, Icons.Material.Filled.Groups, Color.Primary),
+                new ClinicianAlertCard("High-Risk Patients", highRiskCount.ToString(), "Require immediate attention", Color.Error, Icons.Material.Filled.AutoAwesome, Color.Error)
+            };
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Unable to load triage data: {ex.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static Color GetRiskColor(RiskLevel risk) => risk switch
+    {
+        RiskLevel.Critical => Color.Error,
+        RiskLevel.High => Color.Warning,
+        RiskLevel.Medium => Color.Info,
+        _ => Color.Success
     };
 }
 

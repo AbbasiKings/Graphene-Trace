@@ -2,6 +2,6 @@ namespace GrapheneTrace.Core.DTOs.Patient;
 
 public class QuickLogDto
 {
-    public string Text { get; set; } = string.Empty;
+    public string CommentText { get; set; } = string.Empty;
 }
 

@@ -1,146 +1,347 @@
 @page "/clinician/reports"
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Core.DTOs.Clinician
+@using GrapheneTrace.Core.DTOs.Patient
+@using GrapheneTrace.Core.Enums
 @using MudBlazor
+@inject HttpClient Http
+@inject AppToastService ToastService
 
 <PageTitle>Reporting &amp; Exports</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
-        <div>
-            <MudText Typo="Typo.h4" Class="fw-bold">Reporting &amp; Exports</MudText>
-            <MudText Typo="Typo.subtitle2" Class="text-secondary">
-                Generate comparative summaries and export data for patient files or external analysis.
-            </MudText>
-        </div>
-        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">Last export: 2 hours ago</MudChip>
-    </MudStack>
+@if (_loading)
+{
+    <div class="d-flex justify-center my-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(_loadError))
+{
+    <MudAlert Severity="Severity.Error">@_loadError</MudAlert>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+            <div>
+                <MudText Typo="Typo.h4" Class="fw-bold">Reporting &amp; Exports</MudText>
+                <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                    Generate comparative summaries and export data for patient files or external analysis.
+                </MudText>
+            </div>
+            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">Select patient to generate report</MudChip>
+        </MudStack>
 
-    <MudPaper Class="pa-4 elevation-1 mb-4">
-        <MudGrid Spacing="2">
-            <MudItem xs="12" md="3">
-                <MudTextField @bind-Value="_patientId"
-                              Label="Patient ID"
-                              Variant="Variant.Outlined"
-                              Placeholder="PT-71E66AB3"
-                              Immediate="true" />
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudDatePicker @bind-Date="_primaryStart" Label="Primary period start" Variant="Variant.Outlined" />
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudDatePicker @bind-Date="_primaryEnd" Label="Primary period end" Variant="Variant.Outlined" />
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudSelect T="ComparisonPreset" @bind-Value="_comparisonPreset" Label="Comparison range" Variant="Variant.Outlined">
-                    <MudSelectItem Value="@ComparisonPreset.PreviousDay">Previous day</MudSelectItem>
-                    <MudSelectItem Value="@ComparisonPreset.PreviousWeek">Previous week average</MudSelectItem>
-                    <MudSelectItem Value="@ComparisonPreset.Custom">Custom range</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-        </MudGrid>
-        @if (_comparisonPreset == ComparisonPreset.Custom)
-        {
-            <MudGrid Spacing="2" Class="mt-2">
-                <MudItem xs="12" md="3">
-                    <MudDatePicker @bind-Date="_comparisonStart" Label="Comparison start" Variant="Variant.Outlined" />
+        <MudPaper Class="pa-4 elevation-1 mb-4">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="4">
+                    <MudSelect T="Guid?" @bind-Value="_selectedPatientId" Label="Select Patient" Variant="Variant.Outlined">
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">-- Select Patient --</MudSelectItem>
+                        @foreach (var patient in _patients)
+                        {
+                            <MudSelectItem T="Guid?" Value="@patient.PatientId">@patient.PatientName</MudSelectItem>
+                        }
+                    </MudSelect>
                 </MudItem>
-                <MudItem xs="12" md="3">
-                    <MudDatePicker @bind-Date="_comparisonEnd" Label="Comparison end" Variant="Variant.Outlined" />
+                <MudItem xs="12" md="4">
+                    <MudDatePicker @bind-Date="_primaryStart" Label="Primary period start" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudDatePicker @bind-Date="_primaryEnd" Label="Primary period end" Variant="Variant.Outlined" />
                 </MudItem>
             </MudGrid>
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-4">
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Secondary" 
+                           StartIcon="@Icons.Material.Filled.GridOn"
+                           Disabled="@(_selectedPatientId == null)"
+                           OnClick="GenerateReport">
+                    Generate Report
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Secondary" 
+                           StartIcon="@Icons.Material.Filled.GridOn"
+                           Disabled="@(_reportData == null)"
+                           OnClick="ExportCsv">
+                    Export CSV
+                </MudButton>
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                           Disabled="@(_reportData == null)"
+                           OnClick="ExportPdf">
+                    Download PDF
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+
+        @if (_reportData == null)
+        {
+            <MudPaper Class="pa-6 elevation-1">
+                <MudText Typo="Typo.body1" Class="text-secondary">Select a patient and date range, then click "Generate Report" to view metrics.</MudText>
+            </MudPaper>
         }
-        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-4">
-            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.GridOn">Export CSV</MudButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PictureAsPdf">Download PDF</MudButton>
-        </MudStack>
-    </MudPaper>
+        else
+        {
+            <MudGrid Spacing="2">
+                <MudItem xs="12" lg="6">
+                    <MudCard Class="elevation-2 h-100">
+                        <MudCardHeader>
+                            <MudText Typo="Typo.h6">Key Metric Comparison</MudText>
+                            <MudText Typo="Typo.caption" Class="text-secondary">Primary period metrics.</MudText>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudTable T="ReportMetricDto" Items="@_reportMetrics" Dense="true" Hover="true">
+                                <HeaderContent>
+                                    <MudTh>Metric</MudTh>
+                                    <MudTh>Value</MudTh>
+                                    <MudTh>Trend</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Metric">@context.Metric</MudTd>
+                                    <MudTd DataLabel="Value">@context.Value</MudTd>
+                                    <MudTd DataLabel="Trend">
+                                        <MudChip T="string" Color="@context.Color" Size="Size.Small">
+                                            <MudIcon Icon="@context.Icon" Class="me-1" />
+                                            @context.Trend
+                                        </MudChip>
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" lg="6">
+                    <MudCard Class="elevation-2 h-100">
+                        <MudCardHeader>
+                            <MudText Typo="Typo.h6">Pressure Trend</MudText>
+                            <MudText Typo="Typo.caption" Class="text-secondary">Peak pressure index over selected period.</MudText>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            @if (_trendSeries.Count > 0 && _trendLabels.Length > 0)
+                            {
+                                <MudChart ChartType="ChartType.Line" XAxisLabels="@_trendLabels" ChartSeries="@_trendSeries" />
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="text-secondary">No trend data available for selected period.</MudText>
+                            }
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
 
-    <MudGrid Spacing="2">
-        <MudItem xs="12" lg="6">
-            <MudCard Class="elevation-2 h-100">
+            <MudCard Class="elevation-1 mt-4">
                 <MudCardHeader>
-                    <MudText Typo="Typo.h6">Key Metric Comparison</MudText>
-                    <MudText Typo="Typo.caption" Class="text-secondary">Primary period vs comparison range.</MudText>
+                    <MudText Typo="Typo.h6">Narrative Summary</MudText>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudTable T="ClinicianReportMetric" Items="@ReportMetrics" Dense="true" Hover="true">
-                        <HeaderContent>
-                            <MudTh>Metric</MudTh>
-                            <MudTh>Primary</MudTh>
-                            <MudTh>Comparison</MudTh>
-                            <MudTh>Change</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Metric">@context.Metric</MudTd>
-                            <MudTd DataLabel="Primary">@context.CurrentValue</MudTd>
-                            <MudTd DataLabel="Comparison">@context.ComparisonValue</MudTd>
-                            <MudTd DataLabel="Change">
-                                <MudChip T="string" Color="@context.DeltaColor" Size="Size.Small">
-                                    <MudIcon Icon="@context.TrendIcon" Class="me-1" />
-                                    @context.DeltaText
-                                </MudChip>
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
+                    <MudText Typo="Typo.body1">@_narrativeSummary</MudText>
                 </MudCardContent>
             </MudCard>
-        </MudItem>
-        <MudItem xs="12" lg="6">
-            <MudCard Class="elevation-2 h-100">
-                <MudCardHeader>
-                    <MudText Typo="Typo.h6">Hourly Pressure Trend</MudText>
-                    <MudText Typo="Typo.caption" Class="text-secondary">Overlay of peak pressure index across the two selected periods.</MudText>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudChart ChartType="ChartType.Line" XAxisLabels="@TrendLabels" ChartSeries="@TrendSeries" />
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-    </MudGrid>
-
-    <MudCard Class="elevation-1 mt-4">
-        <MudCardHeader>
-            <MudText Typo="Typo.h6">Narrative Summary</MudText>
-        </MudCardHeader>
-        <MudCardContent>
-            <MudText Typo="Typo.body1">
-                Pressure exposure during the selected period shows an elevated heel hotspot between 18:00&nbsp;–&nbsp;20:00, with peak pressure
-                +26% higher relative to the previous day. Contact area remained within recommended bounds, suggesting adequate load distribution.
-                Recommend reinforcing cooldown routine and monitoring patient feedback after orthotic adjustment scheduled tomorrow.
-            </MudText>
-        </MudCardContent>
-    </MudCard>
-</MudContainer>
+        }
+    </MudContainer>
+}
 
 @code {
-    private readonly IReadOnlyList<ClinicianReportMetric> ReportMetrics = new[]
+    private bool _loading = true;
+    private string? _loadError;
+    private List<TriagePatientDto> _patients = new();
+    private Guid? _selectedPatientId
     {
-        new ClinicianReportMetric("Peak Pressure Index", "11.6", "8.9", "+30.3%", Color.Error, Icons.Material.Filled.ArrowUpward),
-        new ClinicianReportMetric("Contact Area %", "59%", "61%", "-2%", Color.Info, Icons.Material.Filled.HorizontalRule),
-        new ClinicianReportMetric("Alerts Generated", "8", "3", "+5", Color.Warning, Icons.Material.Filled.ArrowUpward),
-        new ClinicianReportMetric("Patient Comments", "2", "1", "+1", Color.Info, Icons.Material.Filled.ArrowUpward)
-    };
-
-    private readonly string[] TrendLabels = { "08:00", "12:00", "16:00", "18:00", "20:00", "22:00" };
-
-    private readonly List<ChartSeries> TrendSeries = new()
-    {
-        new ChartSeries { Name = "Primary Period", Data = new double[] { 7.2, 8.5, 9.3, 10.7, 11.6, 9.9 } },
-        new ChartSeries { Name = "Comparison Period", Data = new double[] { 6.8, 7.4, 7.9, 8.4, 8.7, 7.5 } }
-    };
-
-    private string _patientId = "PT-71E66AB3";
-    private DateTime? _primaryStart = DateTime.Today;
+        get => _selectedPatientIdValue;
+        set
+        {
+            _selectedPatientIdValue = value;
+            if (value.HasValue)
+            {
+                _ = GenerateReport();
+            }
+        }
+    }
+    private Guid? _selectedPatientIdValue;
+    private DateTime? _primaryStart = DateTime.Today.AddDays(-7);
     private DateTime? _primaryEnd = DateTime.Today;
-    private DateTime? _comparisonStart = DateTime.Today.AddDays(-1);
-    private DateTime? _comparisonEnd = DateTime.Today.AddDays(-1);
-    private ComparisonPreset _comparisonPreset = ComparisonPreset.PreviousDay;
+    private PatientDetailDto? _reportData;
+    private List<ReportMetricDto> _reportMetrics = new();
+    private string[] _trendLabels = Array.Empty<string>();
+    private List<ChartSeries> _trendSeries = new();
+    private string _narrativeSummary = string.Empty;
 
-    private enum ComparisonPreset
+    protected override async Task OnInitializedAsync()
     {
-        PreviousDay,
-        PreviousWeek,
-        Custom
+        await LoadPatientsAsync();
+    }
+
+    private async Task LoadPatientsAsync()
+    {
+        try
+        {
+            _loading = true;
+            _loadError = null;
+            StateHasChanged();
+
+            _patients = await Http.GetFromJsonAsync<List<TriagePatientDto>>("api/clinician/triage") ?? new();
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _loadError = $"Unable to reach API: {httpEx.Message}. Please ensure the backend is running.";
+            ToastService?.ShowError(_loadError);
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Error loading patients: {ex.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+
+    private async Task GenerateReport()
+    {
+        if (!_selectedPatientId.HasValue || !_primaryStart.HasValue || !_primaryEnd.HasValue)
+        {
+            ToastService?.ShowError("Please select a patient and date range.");
+            return;
+        }
+
+        try
+        {
+            _loading = true;
+            StateHasChanged();
+
+            _reportData = await Http.GetFromJsonAsync<PatientDetailDto>($"api/clinician/patient/{_selectedPatientId.Value}");
+
+            if (_reportData == null)
+            {
+                ToastService?.ShowError("Patient not found or access denied.");
+                return;
+            }
+
+            // Filter trends by date range
+            var filteredTrends = _reportData.MetricTrends
+                .Where(t => t.Timestamp.Date >= _primaryStart.Value.Date && t.Timestamp.Date <= _primaryEnd.Value.Date)
+                .OrderBy(t => t.Timestamp)
+                .ToList();
+
+            if (filteredTrends.Count == 0)
+            {
+                ToastService?.ShowWarning("No data available for the selected date range.");
+                _reportData = null;
+                return;
+            }
+
+            // Calculate metrics
+            var avgPpi = filteredTrends.Average(t => t.PeakPressureIndex);
+            var avgContact = filteredTrends.Average(t => t.ContactAreaPercent);
+            var maxPpi = filteredTrends.Max(t => t.PeakPressureIndex);
+            var alertCount = _reportData.ActiveAlerts?.Count(a => a.CreatedAt.Date >= _primaryStart.Value.Date && a.CreatedAt.Date <= _primaryEnd.Value.Date) ?? 0;
+            var commentCount = _reportData.CommunicationHistory?.Count(c => c.CreatedAt.Date >= _primaryStart.Value.Date && c.CreatedAt.Date <= _primaryEnd.Value.Date) ?? 0;
+
+            _reportMetrics = new List<ReportMetricDto>
+            {
+                new ReportMetricDto { Metric = "Average Peak Pressure Index", Value = $"{avgPpi:F1}", Trend = GetPpiTrend(avgPpi), Color = GetPpiColor(avgPpi), Icon = GetPpiIcon(avgPpi) },
+                new ReportMetricDto { Metric = "Average Contact Area %", Value = $"{avgContact:F1}%", Trend = "Within range", Color = Color.Success, Icon = Icons.Material.Filled.HorizontalRule },
+                new ReportMetricDto { Metric = "Maximum Peak Pressure", Value = $"{maxPpi:F1}", Trend = GetRiskLabel(maxPpi), Color = GetRiskColorFromPpi(maxPpi), Icon = Icons.Material.Filled.ArrowUpward },
+                new ReportMetricDto { Metric = "Alerts Generated", Value = alertCount.ToString(), Trend = "In period", Color = alertCount > 0 ? Color.Warning : Color.Success, Icon = Icons.Material.Filled.WarningAmber },
+                new ReportMetricDto { Metric = "Patient Comments", Value = commentCount.ToString(), Trend = "In period", Color = commentCount > 0 ? Color.Info : Color.Success, Icon = Icons.Material.Filled.Chat }
+            };
+
+            // Build trend chart
+            _trendLabels = filteredTrends.Select(t => t.Timestamp.ToLocalTime().ToString("MM/dd HH:mm")).ToArray();
+            var ppiData = filteredTrends.Select(t => t.PeakPressureIndex).ToArray();
+            _trendSeries = new List<ChartSeries>
+            {
+                new ChartSeries { Name = "Peak Pressure Index", Data = ppiData }
+            };
+
+            // Generate narrative summary
+            _narrativeSummary = GenerateNarrative(filteredTrends, alertCount, commentCount);
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Error generating report: {ex.Message}");
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GenerateNarrative(List<TrendDataDto> trends, int alertCount, int commentCount)
+    {
+        var avgPpi = trends.Average(t => t.PeakPressureIndex);
+        var maxPpi = trends.Max(t => t.PeakPressureIndex);
+        var avgContact = trends.Average(t => t.ContactAreaPercent);
+
+        var summary = $"Pressure analysis for the period {_primaryStart?.ToLocalTime():MMM d} to {_primaryEnd?.ToLocalTime():MMM d} shows ";
+        
+        if (maxPpi >= 75)
+        {
+            summary += $"critical peak pressure levels (max: {maxPpi:F1}) requiring immediate attention. ";
+        }
+        else if (maxPpi >= 60)
+        {
+            summary += $"elevated peak pressure levels (max: {maxPpi:F1}) that should be monitored closely. ";
+        }
+        else
+        {
+            summary += $"moderate pressure levels (max: {maxPpi:F1}) within acceptable range. ";
+        }
+
+        summary += $"Average contact area was {avgContact:F1}%, ";
+        if (avgContact >= 55 && avgContact <= 65)
+        {
+            summary += "indicating optimal load distribution. ";
+        }
+        else
+        {
+            summary += "which may require adjustment. ";
+        }
+
+        if (alertCount > 0)
+        {
+            summary += $"{alertCount} alert(s) were generated during this period. ";
+        }
+
+        if (commentCount > 0)
+        {
+            summary += $"Patient submitted {commentCount} comment(s) for review. ";
+        }
+
+        summary += "Recommend continued monitoring and follow-up as needed.";
+
+        return summary;
+    }
+
+    private string GetPpiTrend(double ppi) => ppi >= 75 ? "Critical" : ppi >= 60 ? "High" : ppi >= 45 ? "Moderate" : "Normal";
+    private Color GetPpiColor(double ppi) => ppi >= 75 ? Color.Error : ppi >= 60 ? Color.Warning : ppi >= 45 ? Color.Info : Color.Success;
+    private string GetPpiIcon(double ppi) => ppi >= 60 ? Icons.Material.Filled.ArrowUpward : Icons.Material.Filled.HorizontalRule;
+    private string GetRiskLabel(double ppi) => ppi >= 75 ? "Critical" : ppi >= 60 ? "High" : "Moderate";
+    private Color GetRiskColorFromPpi(double ppi) => ppi >= 75 ? Color.Error : ppi >= 60 ? Color.Warning : Color.Info;
+
+    private void ExportCsv()
+    {
+        ToastService?.ShowInfo("CSV export functionality will be implemented.");
+    }
+
+    private void ExportPdf()
+    {
+        ToastService?.ShowInfo("PDF export functionality will be implemented.");
+    }
+
+    private class ReportMetricDto
+    {
+        public string Metric { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+        public string Trend { get; set; } = string.Empty;
+        public Color Color { get; set; }
+        public string Icon { get; set; } = string.Empty;
     }
 }
 

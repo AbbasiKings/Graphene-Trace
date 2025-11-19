@@ -1,5 +1,11 @@
 @page "/patient/alerts"
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Client.Services
+@using GrapheneTrace.Core.DTOs.Patient
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject AppToastService ToastService
+@inject AuthService AuthService
 
 <PageTitle>Alerts & Communication</PageTitle>
 
@@ -77,9 +83,10 @@
                         <MudButton Variant="Variant.Filled"
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Send"
-                                   Disabled="string.IsNullOrWhiteSpace(_commentBody)"
+                                   Disabled="string.IsNullOrWhiteSpace(_commentBody) || _submittingComment"
+                                   OnClick="SubmitCommentAsync"
                                    Class="mt-3">
-                            Submit Comment
+                            @(_submittingComment ? "Submitting..." : "Submit Comment")
                         </MudButton>
                     </MudForm>
                 </MudCardContent>
@@ -137,5 +144,75 @@
     private string _commentTimestamp = DateTime.Now.ToString("HH:mm");
     private string _commentRegion = string.Empty;
     private string _commentBody = string.Empty;
+    private bool _submittingComment = false;
+
+    private void EnsureAuthHeader()
+    {
+        if (!string.IsNullOrEmpty(AuthService.Token))
+        {
+            Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AuthService.Token);
+        }
+    }
+
+    private async Task SubmitCommentAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_commentBody) || _submittingComment)
+        {
+            return;
+        }
+
+        try
+        {
+            _submittingComment = true;
+            StateHasChanged();
+
+            EnsureAuthHeader();
+
+            // Build comment text with optional metadata
+            var commentText = _commentBody.Trim();
+            if (!string.IsNullOrWhiteSpace(_commentTimestamp) || !string.IsNullOrWhiteSpace(_commentRegion))
+            {
+                var metadata = new List<string>();
+                if (!string.IsNullOrWhiteSpace(_commentTimestamp))
+                {
+                    metadata.Add($"Time: {_commentTimestamp}");
+                }
+                if (!string.IsNullOrWhiteSpace(_commentRegion))
+                {
+                    metadata.Add($"Region: {_commentRegion}");
+                }
+                commentText = $"{commentText}\n\n[{string.Join(" | ", metadata)}]";
+            }
+
+            var request = new QuickLogDto { CommentText = commentText };
+            var response = await Http.PostAsJsonAsync("api/patient/quicklog", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                ToastService?.ShowSuccess("Comment submitted successfully!");
+                
+                // Clear form
+                _commentBody = string.Empty;
+                _commentTimestamp = DateTime.Now.ToString("HH:mm");
+                _commentRegion = string.Empty;
+                
+                // Optionally reload page data here if needed
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                ToastService?.ShowError($"Failed to submit comment: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Error submitting comment: {ex.Message}");
+        }
+        finally
+        {
+            _submittingComment = false;
+            StateHasChanged();
+        }
+    }
 }
 

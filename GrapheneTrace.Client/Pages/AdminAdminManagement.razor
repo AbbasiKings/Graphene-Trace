@@ -1,0 +1,518 @@
+@page "/admin/admins"
+@using GrapheneTrace.Client.Services
+@using GrapheneTrace.Client.Models
+@using GrapheneTrace.Core.DTOs.Admin
+@using GrapheneTrace.Core.Enums
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@inject IDialogService DialogService
+@inject HttpClient Http
+@inject AuthService AuthService
+@inject AppToastService ToastService
+
+<PageTitle>Admin Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Admin Management</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Manage administrator accounts and system access.
+            </MudText>
+        </div>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenAddAdminDialog" Disabled="@_loading">
+                Add New Admin
+            </MudButton>
+            <MudButton Color="Color.Info" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Dashboard" Href="/admin/dashboard">
+                Dashboard
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (_loading && _admins.Count == 0)
+    {
+        <MudContainer Class="d-flex justify-center align-center" style="min-height: 400px;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        </MudContainer>
+    }
+    else if (!string.IsNullOrEmpty(_loadError))
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">@_loadError</MudAlert>
+    }
+    else
+    {
+        <MudPaper Class="pa-4 mb-4 elevation-1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudTextField @bind-Value="searchTerm" Placeholder="Search by name or email" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Search" Immediate="true" Class="flex-grow-1" />
+                <MudSelect T="string" @bind-Value="statusFilter" Label="Status" Variant="Variant.Outlined" Dense="true">
+                    <MudSelectItem Value="@string.Empty">All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@StatusActive">Active</MudSelectItem>
+                    <MudSelectItem Value="@StatusSuspended">Suspended</MudSelectItem>
+                </MudSelect>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-0 elevation-2">
+            <MudDataGrid T="AdminUser" Items="@FilteredAdmins"
+                         Hover="true"
+                         Dense="true"
+                         Bordered="false"
+                         RowClick="OnRowClick"
+                         SelectedItem="@selectedAdmin"
+                         Class="border-0">
+                <Columns>
+                    <PropertyColumn T="AdminUser" TProperty="string" Property="@(u => u.Id)" Title="Admin ID" />
+                    <PropertyColumn T="AdminUser" TProperty="string" Property="@(u => u.FullName)" Title="Name" />
+                    <PropertyColumn T="AdminUser" TProperty="string" Property="@(u => u.Email)" Title="Email" />
+                    <TemplateColumn Title="Status">
+                        <CellTemplate>
+                            <MudBadge Color="@StatusBadgeColor(context.Item.Status)">
+                                @context.Item.Status
+                            </MudBadge>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn T="AdminUser" TProperty="DateTime" Property="@(u => u.LastLogin)" Title="Last Login" Format="yyyy-MM-dd HH:mm" />
+                    <TemplateColumn Title="Actions">
+                        <CellTemplate>
+                            <MudStack Row="true" Spacing="1">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEditAdminDialog(context.Item)" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteAdminAsync(context.Item)" Disabled="@(!string.IsNullOrEmpty(CurrentAdminId) && context.Item.Id == CurrentAdminId)" />
+                            </MudStack>
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </MudDataGrid>
+        </MudPaper>
+
+        <MudGrid Class="mt-6">
+            <MudItem xs="12" md="6">
+                <MudCard Class="h-100 elevation-1">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Selected Admin Snapshot</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (selectedAdmin is null)
+                        {
+                            <MudText Typo="Typo.caption" Class="text-secondary">Select an admin from the table to view details.</MudText>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.h6">@selectedAdmin.FullName</MudText>
+                                <MudText Typo="Typo.subtitle2" Class="text-secondary">@selectedAdmin.Email</MudText>
+                                <MudDivider Class="my-2" />
+                                <MudChip T="string" Color="Color.Error">Admin</MudChip>
+                                <MudChip T="string" Color="@StatusBadgeColor(selectedAdmin.Status)">
+                                    @selectedAdmin.Status
+                                </MudChip>
+                                <MudText Typo="Typo.body2">Last login: @selectedAdmin.LastLogin.ToString("f")</MudText>
+                                @if (selectedAdmin.Id == CurrentAdminId)
+                                {
+                                    <MudAlert Severity="Severity.Info" Dense="true">This is your account</MudAlert>
+                                }
+                            </MudStack>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudCard Class="h-100 elevation-1">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Security Guidance</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudStack Spacing="1">
+                            <MudAlert Severity="Severity.Warning" Dense="true" Elevation="0">
+                                Admins have full system access. Only create admin accounts for trusted personnel.
+                            </MudAlert>
+                            <MudAlert Severity="Severity.Info" Dense="true" Elevation="0">
+                                Use the Add Admin action to onboard new administrators with minimal required details.
+                            </MudAlert>
+                            <MudAlert Severity="Severity.Info" Dense="true" Elevation="0">
+                                Click any row to review an account. Use the edit action to adjust status or suspend access.
+                            </MudAlert>
+                            <MudAlert Severity="Severity.Warning" Dense="true" Elevation="0">
+                                You cannot delete your own account. Suspended admins cannot sign in until reactivated.
+                            </MudAlert>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private const string StatusActive = "Active";
+    private const string StatusSuspended = "Suspended";
+    private const string RoleAdmin = "Admin";
+
+    private bool _loading = true;
+    private string? _loadError;
+    private List<AdminUser> _admins = new();
+    private string searchTerm = string.Empty;
+    private string statusFilter = string.Empty;
+    private AdminUser? selectedAdmin;
+    private string CurrentAdminId => AuthService.UserId?.ToString() ?? string.Empty;
+
+    private IEnumerable<AdminUser> FilteredAdmins => _admins
+        .Where(MatchesSearch)
+        .Where(MatchesStatus)
+        .OrderByDescending(a => a.LastLogin);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAdminsAsync();
+    }
+
+    private void EnsureAuthHeader()
+    {
+        if (!string.IsNullOrEmpty(AuthService.Token))
+        {
+            Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AuthService.Token);
+        }
+    }
+
+    private async Task LoadAdminsAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        StateHasChanged();
+
+        try
+        {
+            EnsureAuthHeader();
+
+            var response = await Http.GetAsync("api/admin/users");
+            if (response.IsSuccessStatusCode)
+            {
+                var userDtos = await response.Content.ReadFromJsonAsync<List<AdminUserDto>>();
+                if (userDtos != null)
+                {
+                    // Filter only Admins
+                    _admins = userDtos
+                        .Where(dto => dto.Role == UserRole.Admin)
+                        .Select(dto => new AdminUser(
+                            dto.Id.ToString(),
+                            dto.FullName,
+                            dto.Email,
+                            dto.Role.ToString(),
+                            dto.IsActive ? StatusActive : StatusSuspended,
+                            dto.LastLoginAt ?? DateTime.MinValue,
+                            "N/A",
+                            0,
+                            DateTime.MinValue
+                        )).ToList();
+                }
+            }
+            else
+            {
+                _loadError = $"Failed to load admins: {response.StatusCode}";
+                ToastService?.ShowError(_loadError);
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _loadError = $"Cannot connect to API server. Please ensure the backend is running. Error: {httpEx.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Error loading admins: {ex.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool MatchesSearch(AdminUser admin)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            return true;
+        }
+
+        var term = searchTerm.Trim().ToLowerInvariant();
+        return admin.FullName.ToLowerInvariant().Contains(term)
+            || admin.Email.ToLowerInvariant().Contains(term)
+            || admin.Id.ToLowerInvariant().Contains(term);
+    }
+
+    private bool MatchesStatus(AdminUser admin)
+    {
+        if (string.IsNullOrWhiteSpace(statusFilter))
+        {
+            return true;
+        }
+
+        return admin.Status.Equals(statusFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnRowClick(DataGridRowClickEventArgs<AdminUser> args)
+    {
+        selectedAdmin = args.Item;
+    }
+
+    private async Task OpenAddAdminDialog()
+    {
+        var model = new AdminUserFormModel
+        {
+            Role = RoleAdmin,
+            Status = StatusActive
+        };
+        await ShowAdminDialog("Add New Admin", model, isEdit: false);
+    }
+
+    private async Task OpenEditAdminDialog(AdminUser admin)
+    {
+        var model = new AdminUserFormModel
+        {
+            Id = admin.Id,
+            FullName = admin.FullName,
+            Email = admin.Email,
+            Role = admin.Role,
+            Status = admin.Status
+        };
+
+        await ShowAdminDialog("Edit Admin", model, isEdit: true);
+    }
+
+    private async Task ShowAdminDialog(string title, AdminUserFormModel model, bool isEdit)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(UserDialog.FormModel)] = model,
+            [nameof(UserDialog.IsEdit)] = isEdit,
+            [nameof(UserDialog.AvailableClinicians)] = new List<AdminUserDto>()
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            FullWidth = true,
+            MaxWidth = MaxWidth.Small
+        };
+
+        var dialog = DialogService.Show<UserDialog>(title, parameters, options);
+        var result = await dialog.Result;
+
+        if (result.Canceled || result.Data == null || result.Data is not AdminUserFormModel formResult)
+        {
+            return;
+        }
+
+        if (isEdit)
+        {
+            await UpdateAdminAsync(formResult);
+        }
+        else
+        {
+            await CreateAdminAsync(formResult);
+        }
+    }
+
+    private async Task CreateAdminAsync(AdminUserFormModel formResult)
+    {
+        try
+        {
+            EnsureAuthHeader();
+
+            // Validate required fields
+            if (string.IsNullOrWhiteSpace(formResult.FullName))
+            {
+                ToastService?.ShowError("Full Name is required.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(formResult.Email))
+            {
+                ToastService?.ShowError("Email is required.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(formResult.Password))
+            {
+                ToastService?.ShowError("Password is required.");
+                return;
+            }
+
+            var newUserDto = new NewUserDto
+            {
+                FullName = formResult.FullName.Trim(),
+                Email = formResult.Email.Trim(),
+                Password = formResult.Password,
+                Role = UserRole.Admin,
+                AssignedClinicianId = null
+            };
+
+            Console.WriteLine($"Creating admin: {newUserDto.Email}, Role: {newUserDto.Role}");
+            
+            var response = await Http.PostAsJsonAsync("api/admin/users", newUserDto);
+            
+            Console.WriteLine($"Response Status: {response.StatusCode}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var createdDto = await response.Content.ReadFromJsonAsync<AdminUserDto>();
+                if (createdDto != null)
+                {
+                    ToastService?.ShowSuccess("Admin created successfully!");
+                    await LoadAdminsAsync();
+                    selectedAdmin = _admins.FirstOrDefault(u => u.Id == createdDto.Id.ToString());
+                }
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                var statusCode = response.StatusCode;
+                
+                if (statusCode == System.Net.HttpStatusCode.Conflict)
+                {
+                    ToastService?.ShowError("Email already exists. Please use a different email.");
+                }
+                else if (statusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    ToastService?.ShowError("Unauthorized. Please login again.");
+                }
+                else if (statusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    ToastService?.ShowError("You don't have permission to create admins.");
+                }
+                else if (statusCode == System.Net.HttpStatusCode.BadRequest)
+                {
+                    ToastService?.ShowError($"Invalid request: {errorText}");
+                }
+                else
+                {
+                    ToastService?.ShowError($"Failed to create admin (Status: {statusCode}): {errorText}");
+                }
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            ToastService?.ShowError($"Network error: Cannot connect to API server. Please ensure the backend is running on http://localhost:5200. Error: {httpEx.Message}");
+        }
+        catch (TaskCanceledException)
+        {
+            ToastService?.ShowError("Request timeout. The API server may be slow or not responding.");
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Error creating admin: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateAdminAsync(AdminUserFormModel formResult)
+    {
+        if (!Guid.TryParse(formResult.Id, out var userId))
+        {
+            ToastService?.ShowError("Invalid admin ID");
+            return;
+        }
+
+        try
+        {
+            EnsureAuthHeader();
+
+            var updateUserDto = new UpdateUserDto
+            {
+                FullName = formResult.FullName,
+                Email = formResult.Email,
+                Role = UserRole.Admin,
+                IsActive = formResult.Status == StatusActive,
+                AssignedClinicianId = null,
+                Password = string.IsNullOrWhiteSpace(formResult.Password) ? null : formResult.Password
+            };
+
+            var response = await Http.PutAsJsonAsync($"api/admin/users/{userId}", updateUserDto);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var updatedDto = await response.Content.ReadFromJsonAsync<AdminUserDto>();
+                if (updatedDto != null)
+                {
+                    ToastService?.ShowSuccess("Admin updated successfully!");
+                    await LoadAdminsAsync();
+                    selectedAdmin = _admins.FirstOrDefault(u => u.Id == updatedDto.Id.ToString());
+                }
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                ToastService?.ShowError("Admin not found.");
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                ToastService?.ShowError("Email already exists. Please use a different email.");
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                ToastService?.ShowError($"Failed to update admin: {errorText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Error updating admin: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteAdminAsync(AdminUser admin)
+    {
+        if (admin.Id == CurrentAdminId)
+        {
+            ToastService?.ShowError("You cannot delete your own account.");
+            return;
+        }
+
+        if (!Guid.TryParse(admin.Id, out var userId))
+        {
+            ToastService?.ShowError("Invalid admin ID");
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Admin",
+            $"Are you sure you want to delete admin '{admin.FullName}' ({admin.Email})? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            EnsureAuthHeader();
+
+            var response = await Http.DeleteAsync($"api/admin/users/{userId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                ToastService?.ShowSuccess("Admin deleted successfully!");
+                await LoadAdminsAsync();
+                selectedAdmin = null;
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                ToastService?.ShowError("Admin not found.");
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                ToastService?.ShowError($"Failed to delete admin: {errorText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Error deleting admin: {ex.Message}");
+        }
+    }
+
+    private Color StatusBadgeColor(string status) => string.Equals(status, StatusActive, StringComparison.OrdinalIgnoreCase) ? Color.Success : Color.Error;
+}
+

@@ -1,161 +1,249 @@
 @page "/clinician/patients"
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Core.DTOs.Clinician
+@using GrapheneTrace.Core.Enums
 @using MudBlazor
+@inject HttpClient Http
+@inject AppToastService ToastService
 
 <PageTitle>Patient Directory</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
-        <div>
-            <MudText Typo="Typo.h4" Class="fw-bold">Patient Management</MudText>
-            <MudText Typo="Typo.subtitle2" Class="text-secondary">
-                Search, filter, and jump into detailed analysis for any assigned patient.
-            </MudText>
-        </div>
-        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">Total Patients: @Patients.Count</MudChip>
-    </MudStack>
+@if (_loading)
+{
+    <div class="d-flex justify-center my-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(_loadError))
+{
+    <MudAlert Severity="Severity.Error">@_loadError</MudAlert>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+            <div>
+                <MudText Typo="Typo.h4" Class="fw-bold">Patient Management</MudText>
+                <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                    Search, filter, and jump into detailed analysis for any assigned patient.
+                </MudText>
+            </div>
+            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">Total Patients: @_patients.Count</MudChip>
+        </MudStack>
 
-    <MudPaper Class="pa-4 mb-4 elevation-1">
-        <MudGrid Spacing="2">
-            <MudItem xs="12" md="4">
-                <MudTextField @bind-Value="searchTerm"
-                              Variant="Variant.Outlined"
-                              Placeholder="Search by patient ID or name"
-                              Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Outlined.Search"
-                              Immediate="true" />
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <MudSelect T="string" @bind-Value="riskFilter" Label="Risk level" Variant="Variant.Outlined">
-                    <MudSelectItem Value="@string.Empty">All risks</MudSelectItem>
-                    <MudSelectItem Value="@("Critical")">Critical</MudSelectItem>
-                    <MudSelectItem Value="@("High")">High</MudSelectItem>
-                    <MudSelectItem Value="@("Moderate")">Moderate</MudSelectItem>
-                    <MudSelectItem Value="@("Low")">Low</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <MudSelect T="string" @bind-Value="alertFilter" Label="Recent alert severity" Variant="Variant.Outlined">
-                    <MudSelectItem Value="@string.Empty">Any severity</MudSelectItem>
-                    <MudSelectItem Value="@("Critical")">Critical</MudSelectItem>
-                    <MudSelectItem Value="@("High")">High</MudSelectItem>
-                    <MudSelectItem Value="@("Moderate")">Moderate</MudSelectItem>
-                    <MudSelectItem Value="@("Informational")">Informational</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
+        <MudPaper Class="pa-4 mb-4 elevation-1">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="searchTerm"
+                                  Variant="Variant.Outlined"
+                                  Placeholder="Search by patient ID or name"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Outlined.Search"
+                                  Immediate="true" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect T="RiskLevel?" @bind-Value="riskFilter" Label="Risk level" Variant="Variant.Outlined">
+                        <MudSelectItem T="RiskLevel?" Value="@((RiskLevel?)null)">All risks</MudSelectItem>
+                        <MudSelectItem T="RiskLevel?" Value="@RiskLevel.Critical">Critical</MudSelectItem>
+                        <MudSelectItem T="RiskLevel?" Value="@RiskLevel.High">High</MudSelectItem>
+                        <MudSelectItem T="RiskLevel?" Value="@RiskLevel.Medium">Medium</MudSelectItem>
+                        <MudSelectItem T="RiskLevel?" Value="@RiskLevel.Low">Low</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect T="int?" @bind-Value="alertFilter" Label="Min new alerts" Variant="Variant.Outlined">
+                        <MudSelectItem T="int?" Value="@((int?)null)">Any</MudSelectItem>
+                        <MudSelectItem T="int?" Value="@((int?)1)">1+</MudSelectItem>
+                        <MudSelectItem T="int?" Value="@((int?)3)">3+</MudSelectItem>
+                        <MudSelectItem T="int?" Value="@((int?)5)">5+</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
 
-    <MudPaper Class="pa-0 elevation-2">
-        <MudTable T="ClinicianDirectoryPatient" Items="FilteredPatients" Hover="true" Dense="true">
-            <HeaderContent>
-                <MudTh>Patient</MudTh>
-                <MudTh>Risk</MudTh>
-                <MudTh class="text-end">Total Alerts</MudTh>
-                <MudTh>Last Alert</MudTh>
-                <MudTh>Last Severity</MudTh>
-                <MudTh>Device</MudTh>
-                <MudTh></MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Patient">
-                    <MudText Typo="Typo.body2" Class="fw-semibold">@context.PatientId</MudText>
-                    <MudText Typo="Typo.caption" Class="text-secondary">@context.Name</MudText>
-                </MudTd>
-                <MudTd DataLabel="Risk">
-                    <MudChip T="string" Color="@RiskColor(context.RiskLevel)" Size="Size.Small">@context.RiskLevel</MudChip>
-                </MudTd>
-                <MudTd DataLabel="Total Alerts" Class="text-end">@context.TotalAlerts</MudTd>
-                <MudTd DataLabel="Last Alert">
-                    <MudText Typo="Typo.body2">@context.LastAlertAt.ToString("g")</MudText>
-                </MudTd>
-                <MudTd DataLabel="Last Severity">
-                    <MudChip T="string" Color="@SeverityColor(context.LastAlertSeverity)" Size="Size.Small">@context.LastAlertSeverity</MudChip>
-                </MudTd>
-                <MudTd DataLabel="Device">
-                    <MudText Typo="Typo.body2">@context.AssignedDevice</MudText>
-                </MudTd>
-                <MudTd DataLabel="Actions">
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               Href="/clinician/patient-analysis">
-                        Open Analysis
-                    </MudButton>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    </MudPaper>
-</MudContainer>
+        <MudPaper Class="pa-0 elevation-2">
+            @if (_filteredPatients == null || _filteredPatients.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="pa-4 text-secondary">No patients found matching your filters.</MudText>
+            }
+            else
+            {
+                <MudTable T="TriagePatientDto" Items="@_filteredPatients" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Patient</MudTh>
+                        <MudTh>Risk</MudTh>
+                        <MudTh class="text-end">New Alerts</MudTh>
+                        <MudTh class="text-end">New Comments</MudTh>
+                        <MudTh>Last Data</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Patient">
+                            <MudText Typo="Typo.body2" Class="fw-semibold">@context.PatientName</MudText>
+                            <MudText Typo="Typo.caption" Class="text-secondary">@(context.PatientId != Guid.Empty ? context.PatientId.ToString("N")[..8] : "N/A")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Risk">
+                            <MudChip T="string" Color="@GetRiskColor(context.HighestRisk)" Size="Size.Small">@context.HighestRisk</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="New Alerts" Class="text-end">
+                            @if (context.NewAlertCount > 0)
+                            {
+                                <MudBadge Content="@context.NewAlertCount" Color="Color.Error" Overlap="true">
+                                    <MudText Typo="Typo.body2">@context.NewAlertCount</MudText>
+                                </MudBadge>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2">0</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="New Comments" Class="text-end">
+                            @if (context.NewCommentCount > 0)
+                            {
+                                <MudBadge Content="@context.NewCommentCount" Color="Color.Info" Overlap="true">
+                                    <MudText Typo="Typo.body2">@context.NewCommentCount</MudText>
+                                </MudBadge>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2">0</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Last Data">
+                            <MudText Typo="Typo.body2">@(context.LastDataReceived?.ToLocalTime().ToString("g") ?? "No data")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       Href="@($"/clinician/patient-analysis?patientId={context.PatientId}")">
+                                Open Analysis
+                            </MudButton>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    </MudContainer>
+}
 
 @code {
-    private readonly IReadOnlyList<ClinicianDirectoryPatient> Patients = new[]
-    {
-        new ClinicianDirectoryPatient("PT-71E66AB3", "Amelia Preston", "Critical", 18, DateTime.Now.AddMinutes(-12), "Critical", "Graphene Insole v3"),
-        new ClinicianDirectoryPatient("PT-19AA72F1", "Noah Sullivan", "High", 9, DateTime.Now.AddMinutes(-33), "High", "Graphene Insole v3"),
-        new ClinicianDirectoryPatient("PT-5FF9AA21", "Ella Martinez", "Moderate", 6, DateTime.Now.AddMinutes(-58), "Moderate", "Graphene Insole v2"),
-        new ClinicianDirectoryPatient("PT-5522201B", "Logan Pierce", "High", 11, DateTime.Now.AddHours(-2), "High", "Graphene Insole v3"),
-        new ClinicianDirectoryPatient("PT-90CC1144", "Harper Diaz", "Moderate", 5, DateTime.Now.AddHours(-7), "Informational", "Graphene Insole v1"),
-        new ClinicianDirectoryPatient("PT-43DD1982", "Maya Chen", "Low", 2, DateTime.Now.AddDays(-1), "Informational", "Graphene Insole v3"),
-        new ClinicianDirectoryPatient("PT-67AB3210", "Jonah Patel", "High", 8, DateTime.Now.AddHours(-5), "High", "Graphene Insole v2"),
-        new ClinicianDirectoryPatient("PT-77BC6521", "Sofia Alvarez", "Moderate", 4, DateTime.Now.AddHours(-9), "Moderate", "Graphene Insole v3")
-    };
-
+    private bool _loading = true;
+    private string? _loadError;
+    private List<TriagePatientDto> _patients = new();
     private string searchTerm = string.Empty;
-    private string riskFilter = string.Empty;
-    private string alertFilter = string.Empty;
+    private RiskLevel? riskFilter;
+    private int? alertFilter;
 
-    private IEnumerable<ClinicianDirectoryPatient> FilteredPatients => Patients
-        .Where(MatchesSearch)
-        .Where(MatchesRisk)
-        .Where(MatchesSeverity)
-        .OrderByDescending(p => p.LastAlertAt);
-
-    private bool MatchesSearch(ClinicianDirectoryPatient patient)
+    private List<TriagePatientDto> _filteredPatients
     {
+        get
+        {
+            if (_patients == null || _patients.Count == 0)
+            {
+                return new List<TriagePatientDto>();
+            }
+
+            return _patients
+                .Where(MatchesSearch)
+                .Where(MatchesRisk)
+                .Where(MatchesAlertCount)
+                .OrderByDescending(p => p.HighestRisk)
+                .ThenByDescending(p => p.NewAlertCount)
+                .ThenByDescending(p => p.LastDataReceived)
+                .ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPatientsAsync();
+    }
+
+    private async Task LoadPatientsAsync()
+    {
+        try
+        {
+            _loading = true;
+            _loadError = null;
+            _patients = new List<TriagePatientDto>();
+            StateHasChanged();
+
+            var response = await Http.GetFromJsonAsync<List<TriagePatientDto>>("api/clinician/triage");
+            _patients = response ?? new List<TriagePatientDto>();
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _loadError = $"Unable to reach API: {httpEx.Message}. Please ensure the backend is running.";
+            ToastService?.ShowError(_loadError);
+            _patients = new List<TriagePatientDto>();
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Error loading patients: {ex.Message}";
+            ToastService?.ShowError(_loadError);
+            _patients = new List<TriagePatientDto>();
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool MatchesSearch(TriagePatientDto patient)
+    {
+        if (patient == null)
+        {
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(searchTerm))
         {
             return true;
         }
 
         var term = searchTerm.Trim().ToLowerInvariant();
-        return patient.PatientId.ToLowerInvariant().Contains(term) || patient.Name.ToLowerInvariant().Contains(term);
+        var nameMatch = !string.IsNullOrEmpty(patient.PatientName) && patient.PatientName.ToLowerInvariant().Contains(term);
+        var idMatch = patient.PatientId != Guid.Empty && patient.PatientId.ToString("N").ToLowerInvariant().Contains(term);
+        return nameMatch || idMatch;
     }
 
-    private bool MatchesRisk(ClinicianDirectoryPatient patient)
+    private bool MatchesRisk(TriagePatientDto patient)
     {
-        if (string.IsNullOrWhiteSpace(riskFilter))
+        if (patient == null)
+        {
+            return false;
+        }
+
+        if (!riskFilter.HasValue)
         {
             return true;
         }
 
-        return string.Equals(patient.RiskLevel, riskFilter, StringComparison.OrdinalIgnoreCase);
+        return patient.HighestRisk == riskFilter.Value;
     }
 
-    private bool MatchesSeverity(ClinicianDirectoryPatient patient)
+    private bool MatchesAlertCount(TriagePatientDto patient)
     {
-        if (string.IsNullOrWhiteSpace(alertFilter))
+        if (patient == null)
+        {
+            return false;
+        }
+
+        if (!alertFilter.HasValue)
         {
             return true;
         }
 
-        return string.Equals(patient.LastAlertSeverity, alertFilter, StringComparison.OrdinalIgnoreCase);
+        return patient.NewAlertCount >= alertFilter.Value;
     }
 
-    private static Color RiskColor(string riskLevel) => riskLevel switch
+    private static Color GetRiskColor(RiskLevel risk) => risk switch
     {
-        "Critical" => Color.Error,
-        "High" => Color.Warning,
-        "Moderate" => Color.Info,
+        RiskLevel.Critical => Color.Error,
+        RiskLevel.High => Color.Warning,
+        RiskLevel.Medium => Color.Info,
         _ => Color.Success
-    };
-
-    private static Color SeverityColor(string severity) => severity switch
-    {
-        "Critical" => Color.Error,
-        "High" => Color.Warning,
-        "Moderate" => Color.Info,
-        "Informational" => Color.Secondary,
-        _ => Color.Primary
     };
 }
 

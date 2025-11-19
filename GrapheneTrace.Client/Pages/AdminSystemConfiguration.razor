@@ -1,4 +1,11 @@
 @page "/admin/configuration"
+@using GrapheneTrace.Client.Services
+@using GrapheneTrace.Core.DTOs.Admin
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject AuthService AuthService
+@inject AppToastService ToastService
 
 <PageTitle>System Configuration & Auditing</PageTitle>
 
@@ -72,29 +79,45 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-4">
                     <MudTextField @bind-Value="auditSearchTerm" Placeholder="Filter by user, action, or IP address" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Search" Immediate="true" Class="flex-grow-1" />
                     <MudDateRangePicker @bind-DateRange="auditDateRange" Label="Date range" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadAuditLogsAsync" Disabled="@_loadingAuditLogs">
+                        Refresh
+                    </MudButton>
                 </MudStack>
-                <MudTable T="AuditLogDetail" Dense="true" Hover="true" Bordered="false" Breakpoint="Breakpoint.Md" Items="@FilteredAuditLogs">
-                    <HeaderContent>
-                        <MudTh>Timestamp</MudTh>
-                        <MudTh>User</MudTh>
-                        <MudTh>IP Address</MudTh>
-                        <MudTh>Action</MudTh>
-                        <MudTh>Outcome</MudTh>
-                        <MudTh>Notes</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Timestamp">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
-                        <MudTd DataLabel="User">@context.Actor</MudTd>
-                        <MudTd DataLabel="IP Address">@context.IpAddress</MudTd>
-                        <MudTd DataLabel="Action">@context.Action</MudTd>
-                        <MudTd DataLabel="Outcome">
-                            <MudChip T="string" Color="@OutcomeColor(context.Outcome)" Size="Size.Small">
-                                @context.Outcome
-                            </MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Notes">@context.Notes</MudTd>
-                    </RowTemplate>
-                </MudTable>
+                @if (_loadingAuditLogs && _auditLogs.Count == 0)
+                {
+                    <MudContainer Class="d-flex justify-center align-center" style="min-height: 200px;">
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" />
+                    </MudContainer>
+                }
+                else if (!string.IsNullOrEmpty(_auditLoadError))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mb-4">@_auditLoadError</MudAlert>
+                }
+                else
+                {
+                    <MudTable T="AuditLogDetail" Dense="true" Hover="true" Bordered="false" Breakpoint="Breakpoint.Md" Items="@FilteredAuditLogs" Loading="@_loadingAuditLogs">
+                        <HeaderContent>
+                            <MudTh>Timestamp</MudTh>
+                            <MudTh>User</MudTh>
+                            <MudTh>IP Address</MudTh>
+                            <MudTh>Action</MudTh>
+                            <MudTh>Outcome</MudTh>
+                            <MudTh>Notes</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Timestamp">@context.OccurredAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                            <MudTd DataLabel="User">@context.Actor</MudTd>
+                            <MudTd DataLabel="IP Address">@context.IpAddress</MudTd>
+                            <MudTd DataLabel="Action">@context.Action</MudTd>
+                            <MudTd DataLabel="Outcome">
+                                <MudChip T="string" Color="@OutcomeColor(context.Outcome)" Size="Size.Small">
+                                    @context.Outcome
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Notes">@context.Notes</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
             </MudPaper>
         </MudTabPanel>
 
@@ -163,23 +186,75 @@
 
     private string auditSearchTerm = string.Empty;
     private DateRange auditDateRange = new(DateTime.Today.AddDays(-7), DateTime.Today);
+    private bool _loadingAuditLogs = false;
+    private string? _auditLoadError;
+    private List<AuditLogDetail> _auditLogs = new();
 
-    private List<AuditLogDetail> AuditLogs { get; } =
-    [
-        new(DateTime.Now.AddMinutes(-12), "g.turner@graphenetrace.com", "10.14.2.18", "Updated clinician mapping", "Success", "Linked patient PT-19aa72f1 to Dr. Kaur"),
-        new(DateTime.Now.AddMinutes(-35), "security-service", "10.14.2.12", "Failed login", "Failure", "Incorrect password for admin@graphenetrace.com"),
-        new(DateTime.Now.AddHours(-1), "n.dimitrov@graphenetrace.com", "172.31.8.9", "Changed alert sensitivity", "Success", "Adjusted from 70% to 65%"),
-        new(DateTime.Now.AddHours(-3), "integration-bot", "34.111.20.4", "Rotated API credential", "Success", "Pipeline: ingest-stream-east"),
-        new(DateTime.Now.AddHours(-6), "security-service", "10.14.2.12", "Failed login", "Failure", "Account locked for 10 minutes"),
-        new(DateTime.Now.AddHours(-9), "a.yeung@graphenetrace.com", "172.31.8.9", "Updated configuration", "Success", "Default PPI minimum set to 10.5 px"),
-        new(DateTime.Now.AddHours(-15), "backup-service", "10.14.2.19", "Backup completed", "Success", "Duration: 9m 12s"),
-        new(DateTime.Now.AddDays(-1), "audit-service", "10.14.2.30", "Exported audit report", "Success", "Period: 2025-10-01 to 2025-10-14"),
-        new(DateTime.Now.AddDays(-2), "security-service", "10.14.2.12", "Failed login", "Failure", "Suspicious attempt blocked"),
-        new(DateTime.Now.AddDays(-4), "c.williams@graphenetrace.com", "172.31.8.18", "Edited alert template", "Success", "Updated headline for urgent alerts")
-    ];
-
-    private IEnumerable<AuditLogDetail> FilteredAuditLogs => AuditLogs
+    private IEnumerable<AuditLogDetail> FilteredAuditLogs => _auditLogs
         .Where(log => MatchesAuditSearch(log) && WithinRange(log));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuditLogsAsync();
+    }
+
+    private void EnsureAuthHeader()
+    {
+        if (!string.IsNullOrEmpty(AuthService.Token))
+        {
+            Http.DefaultRequestHeaders.Remove("Authorization");
+            Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AuthService.Token);
+        }
+    }
+
+    private async Task LoadAuditLogsAsync()
+    {
+        _loadingAuditLogs = true;
+        _auditLoadError = null;
+        StateHasChanged();
+
+        try
+        {
+            EnsureAuthHeader();
+
+            var response = await Http.GetAsync("api/admin/audit?limit=500");
+            if (response.IsSuccessStatusCode)
+            {
+                var auditDtos = await response.Content.ReadFromJsonAsync<List<SystemAuditLogDto>>();
+                if (auditDtos != null)
+                {
+                    _auditLogs = auditDtos.Select(dto => new AuditLogDetail(
+                        dto.CreatedAt,
+                        dto.ActorName ?? "System",
+                        "N/A", // IP address not stored in current DTO
+                        dto.Action,
+                        "Success", // Outcome not stored, defaulting to Success
+                        dto.MetadataJson
+                    )).ToList();
+                }
+            }
+            else
+            {
+                _auditLoadError = $"Failed to load audit logs: {response.StatusCode}";
+                ToastService?.ShowError(_auditLoadError);
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _auditLoadError = $"Cannot connect to API server. Please ensure the backend is running. Error: {httpEx.Message}";
+            ToastService?.ShowError(_auditLoadError);
+        }
+        catch (Exception ex)
+        {
+            _auditLoadError = $"Error loading audit logs: {ex.Message}";
+            ToastService?.ShowError(_auditLoadError);
+        }
+        finally
+        {
+            _loadingAuditLogs = false;
+            StateHasChanged();
+        }
+    }
 
     private bool MatchesAuditSearch(AuditLogDetail log)
     {

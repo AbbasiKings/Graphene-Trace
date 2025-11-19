@@ -1,0 +1,532 @@
+@page "/admin/clinicians"
+@using GrapheneTrace.Client.Services
+@using GrapheneTrace.Client.Models
+@using GrapheneTrace.Core.DTOs.Admin
+@using GrapheneTrace.Core.Enums
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@inject IDialogService DialogService
+@inject HttpClient Http
+@inject AuthService AuthService
+@inject AppToastService ToastService
+
+<PageTitle>Clinician Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+        <div>
+            <MudText Typo="Typo.h4" Class="fw-bold">Clinician Management</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                Manage clinician accounts, assignments, and lifecycle operations.
+            </MudText>
+        </div>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenAddClinicianDialog" Disabled="@_loading">
+                Add New Clinician
+            </MudButton>
+            <MudButton Color="Color.Info" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.People" Href="/admin/users">
+                Manage Patients
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (_loading && _clinicians.Count == 0)
+    {
+        <MudContainer Class="d-flex justify-center align-center" style="min-height: 400px;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        </MudContainer>
+    }
+    else if (!string.IsNullOrEmpty(_loadError))
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">@_loadError</MudAlert>
+    }
+    else
+    {
+        <MudPaper Class="pa-4 mb-4 elevation-1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudTextField @bind-Value="searchTerm" Placeholder="Search by name or email" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Search" Immediate="true" Class="flex-grow-1" />
+                <MudSelect T="string" @bind-Value="statusFilter" Label="Status" Variant="Variant.Outlined" Dense="true">
+                    <MudSelectItem Value="@string.Empty">All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@StatusActive">Active</MudSelectItem>
+                    <MudSelectItem Value="@StatusSuspended">Suspended</MudSelectItem>
+                </MudSelect>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-0 elevation-2">
+            <MudDataGrid T="AdminUser" Items="@FilteredClinicians"
+                         Hover="true"
+                         Dense="true"
+                         Bordered="false"
+                         RowClick="OnRowClick"
+                         SelectedItem="@selectedClinician"
+                         Class="border-0">
+                <Columns>
+                    <PropertyColumn T="AdminUser" TProperty="string" Property="@(u => u.Id)" Title="Clinician ID" />
+                    <PropertyColumn T="AdminUser" TProperty="string" Property="@(u => u.FullName)" Title="Name" />
+                    <PropertyColumn T="AdminUser" TProperty="string" Property="@(u => u.Email)" Title="Email" />
+                    <TemplateColumn Title="Status">
+                        <CellTemplate>
+                            <MudBadge Color="@StatusBadgeColor(context.Item.Status)">
+                                @context.Item.Status
+                            </MudBadge>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn T="AdminUser" TProperty="DateTime" Property="@(u => u.LastLogin)" Title="Last Login" Format="yyyy-MM-dd HH:mm" />
+                    <TemplateColumn Title="Assigned Patients">
+                        <CellTemplate>
+                            <MudChip T="int" Color="Color.Info" Size="Size.Small">@GetAssignedPatientCount(context.Item.Id)</MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Actions">
+                        <CellTemplate>
+                            <MudStack Row="true" Spacing="1">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="() => OpenEditClinicianDialog(context.Item)" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="() => DeleteClinicianAsync(context.Item)" />
+                            </MudStack>
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </MudDataGrid>
+        </MudPaper>
+
+        <MudGrid Class="mt-6">
+            <MudItem xs="12" md="6">
+                <MudCard Class="h-100 elevation-1">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Selected Clinician Snapshot</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (selectedClinician is null)
+                        {
+                            <MudText Typo="Typo.caption" Class="text-secondary">Select a clinician from the table to view details.</MudText>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.h6">@selectedClinician.FullName</MudText>
+                                <MudText Typo="Typo.subtitle2" Class="text-secondary">@selectedClinician.Email</MudText>
+                                <MudDivider Class="my-2" />
+                                <MudChip T="string" Color="Color.Info">Clinician</MudChip>
+                                <MudChip T="string" Color="@StatusBadgeColor(selectedClinician.Status)">
+                                    @selectedClinician.Status
+                                </MudChip>
+                                <MudText Typo="Typo.body2">Last login: @selectedClinician.LastLogin.ToString("f")</MudText>
+                                <MudPaper Class="pa-3 border border-1 rounded-3">
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.subtitle2" Class="fw-semibold">Assignment Summary</MudText>
+                                        <MudText Typo="Typo.body2">Assigned patients: @GetAssignedPatientCount(selectedClinician.Id)</MudText>
+                                    </MudStack>
+                                </MudPaper>
+                            </MudStack>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudCard Class="h-100 elevation-1">
+                    <MudCardHeader>
+                        <MudText Typo="Typo.h6">Lifecycle Guidance</MudText>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudStack Spacing="1">
+                            <MudAlert Severity="Severity.Info" Dense="true" Elevation="0">
+                                Use the Add Clinician action to onboard new clinicians with minimal required details.
+                            </MudAlert>
+                            <MudAlert Severity="Severity.Info" Dense="true" Elevation="0">
+                                Click any row to review an account. Use the edit action to adjust status or suspend access.
+                            </MudAlert>
+                            <MudAlert Severity="Severity.Warning" Dense="true" Elevation="0">
+                                Suspended clinicians cannot sign in until reactivated. Assigned patients remain linked.
+                            </MudAlert>
+                            <MudAlert Severity="Severity.Info" Dense="true" Elevation="0">
+                                Clinicians can be assigned to multiple patients for comprehensive care management.
+                            </MudAlert>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private const string StatusActive = "Active";
+    private const string StatusSuspended = "Suspended";
+    private const string RoleClinician = "Clinician";
+
+    private bool _loading = true;
+    private string? _loadError;
+    private List<AdminUser> _clinicians = new();
+    private List<AdminUserDto> _allUsers = new(); // To count assigned patients
+    private string searchTerm = string.Empty;
+    private string statusFilter = string.Empty;
+    private AdminUser? selectedClinician;
+
+    private IEnumerable<AdminUser> FilteredClinicians => _clinicians
+        .Where(MatchesSearch)
+        .Where(MatchesStatus)
+        .OrderByDescending(c => c.LastLogin);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCliniciansAsync();
+    }
+
+    private void EnsureAuthHeader()
+    {
+        if (!string.IsNullOrEmpty(AuthService.Token))
+        {
+            Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AuthService.Token);
+        }
+    }
+
+    private async Task LoadCliniciansAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        StateHasChanged();
+
+        try
+        {
+            EnsureAuthHeader();
+
+            var response = await Http.GetAsync("api/admin/users");
+            if (response.IsSuccessStatusCode)
+            {
+                var userDtos = await response.Content.ReadFromJsonAsync<List<AdminUserDto>>();
+                if (userDtos != null)
+                {
+                    _allUsers = userDtos; // Store all users for patient count
+
+                    // Filter only Clinicians
+                    _clinicians = userDtos
+                        .Where(dto => dto.Role == UserRole.Clinician)
+                        .Select(dto => new AdminUser(
+                            dto.Id.ToString(),
+                            dto.FullName,
+                            dto.Email,
+                            dto.Role.ToString(),
+                            dto.IsActive ? StatusActive : StatusSuspended,
+                            dto.LastLoginAt ?? DateTime.MinValue,
+                            "N/A", // Not applicable for clinicians
+                            0,
+                            DateTime.MinValue
+                        )).ToList();
+                }
+            }
+            else
+            {
+                _loadError = $"Failed to load clinicians: {response.StatusCode}";
+                ToastService?.ShowError(_loadError);
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _loadError = $"Cannot connect to API server. Please ensure the backend is running. Error: {httpEx.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Error loading clinicians: {ex.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private int GetAssignedPatientCount(string clinicianId)
+    {
+        if (!Guid.TryParse(clinicianId, out var guid))
+        {
+            return 0;
+        }
+
+        return _allUsers.Count(u => u.Role == UserRole.Patient && u.AssignedClinicianId == guid);
+    }
+
+    private bool MatchesSearch(AdminUser clinician)
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            return true;
+        }
+
+        var term = searchTerm.Trim().ToLowerInvariant();
+        return clinician.FullName.ToLowerInvariant().Contains(term)
+            || clinician.Email.ToLowerInvariant().Contains(term)
+            || clinician.Id.ToLowerInvariant().Contains(term);
+    }
+
+    private bool MatchesStatus(AdminUser clinician)
+    {
+        if (string.IsNullOrWhiteSpace(statusFilter))
+        {
+            return true;
+        }
+
+        return clinician.Status.Equals(statusFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnRowClick(DataGridRowClickEventArgs<AdminUser> args)
+    {
+        selectedClinician = args.Item;
+    }
+
+    private async Task OpenAddClinicianDialog()
+    {
+        var model = new AdminUserFormModel
+        {
+            Role = RoleClinician,
+            Status = StatusActive
+        };
+        await ShowClinicianDialog("Add New Clinician", model, isEdit: false);
+    }
+
+    private async Task OpenEditClinicianDialog(AdminUser clinician)
+    {
+        var model = new AdminUserFormModel
+        {
+            Id = clinician.Id,
+            FullName = clinician.FullName,
+            Email = clinician.Email,
+            Role = clinician.Role,
+            Status = clinician.Status
+        };
+
+        await ShowClinicianDialog("Edit Clinician", model, isEdit: true);
+    }
+
+    private async Task ShowClinicianDialog(string title, AdminUserFormModel model, bool isEdit)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(UserDialog.FormModel)] = model,
+            [nameof(UserDialog.IsEdit)] = isEdit,
+            [nameof(UserDialog.AvailableClinicians)] = new List<AdminUserDto>() // Empty for clinicians
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            FullWidth = true,
+            MaxWidth = MaxWidth.Small
+        };
+
+        var dialog = DialogService.Show<UserDialog>(title, parameters, options);
+        var result = await dialog.Result;
+
+        if (result.Canceled || result.Data == null || result.Data is not AdminUserFormModel formResult)
+        {
+            return;
+        }
+
+        if (isEdit)
+        {
+            await UpdateClinicianAsync(formResult);
+        }
+        else
+        {
+            await CreateClinicianAsync(formResult);
+        }
+    }
+
+    private async Task CreateClinicianAsync(AdminUserFormModel formResult)
+    {
+        try
+        {
+            EnsureAuthHeader();
+
+            // Validate required fields
+            if (string.IsNullOrWhiteSpace(formResult.FullName))
+            {
+                ToastService?.ShowError("Full Name is required.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(formResult.Email))
+            {
+                ToastService?.ShowError("Email is required.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(formResult.Password))
+            {
+                ToastService?.ShowError("Password is required.");
+                return;
+            }
+
+            var newUserDto = new NewUserDto
+            {
+                FullName = formResult.FullName.Trim(),
+                Email = formResult.Email.Trim(),
+                Password = formResult.Password,
+                Role = UserRole.Clinician,
+                AssignedClinicianId = null // Clinicians don't have assigned clinicians
+            };
+
+            var response = await Http.PostAsJsonAsync("api/admin/users", newUserDto);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var createdDto = await response.Content.ReadFromJsonAsync<AdminUserDto>();
+                if (createdDto != null)
+                {
+                    ToastService?.ShowSuccess("Clinician created successfully!");
+                    await LoadCliniciansAsync();
+                    selectedClinician = _clinicians.FirstOrDefault(u => u.Id == createdDto.Id.ToString());
+                }
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                var statusCode = response.StatusCode;
+                
+                if (statusCode == System.Net.HttpStatusCode.Conflict)
+                {
+                    ToastService?.ShowError("Email already exists. Please use a different email.");
+                }
+                else if (statusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    ToastService?.ShowError("Unauthorized. Please login again.");
+                }
+                else if (statusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    ToastService?.ShowError("You don't have permission to create clinicians.");
+                }
+                else if (statusCode == System.Net.HttpStatusCode.BadRequest)
+                {
+                    ToastService?.ShowError($"Invalid request: {errorText}");
+                }
+                else
+                {
+                    ToastService?.ShowError($"Failed to create clinician (Status: {statusCode}): {errorText}");
+                }
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            ToastService?.ShowError($"Network error: Cannot connect to API server. Please ensure the backend is running on http://localhost:5200. Error: {httpEx.Message}");
+        }
+        catch (TaskCanceledException)
+        {
+            ToastService?.ShowError("Request timeout. The API server may be slow or not responding.");
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Error creating clinician: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateClinicianAsync(AdminUserFormModel formResult)
+    {
+        if (!Guid.TryParse(formResult.Id, out var userId))
+        {
+            ToastService?.ShowError("Invalid clinician ID");
+            return;
+        }
+
+        try
+        {
+            EnsureAuthHeader();
+
+            var updateUserDto = new UpdateUserDto
+            {
+                FullName = formResult.FullName,
+                Email = formResult.Email,
+                Role = UserRole.Clinician,
+                IsActive = formResult.Status == StatusActive,
+                AssignedClinicianId = null, // Clinicians don't have assigned clinicians
+                Password = string.IsNullOrWhiteSpace(formResult.Password) ? null : formResult.Password
+            };
+
+            var response = await Http.PutAsJsonAsync($"api/admin/users/{userId}", updateUserDto);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var updatedDto = await response.Content.ReadFromJsonAsync<AdminUserDto>();
+                if (updatedDto != null)
+                {
+                    ToastService?.ShowSuccess("Clinician updated successfully!");
+                    await LoadCliniciansAsync();
+                    selectedClinician = _clinicians.FirstOrDefault(u => u.Id == updatedDto.Id.ToString());
+                }
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                ToastService?.ShowError("Clinician not found.");
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                ToastService?.ShowError("Email already exists. Please use a different email.");
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                ToastService?.ShowError($"Failed to update clinician: {errorText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Error updating clinician: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteClinicianAsync(AdminUser clinician)
+    {
+        if (!Guid.TryParse(clinician.Id, out var userId))
+        {
+            ToastService?.ShowError("Invalid clinician ID");
+            return;
+        }
+
+        var patientCount = GetAssignedPatientCount(clinician.Id);
+        var message = patientCount > 0
+            ? $"Are you sure you want to delete clinician '{clinician.FullName}' ({clinician.Email})? This clinician has {patientCount} assigned patient(s)."
+            : $"Are you sure you want to delete clinician '{clinician.FullName}' ({clinician.Email})?";
+
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Clinician",
+            message,
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            EnsureAuthHeader();
+
+            var response = await Http.DeleteAsync($"api/admin/users/{userId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                ToastService?.ShowSuccess("Clinician deleted successfully!");
+                await LoadCliniciansAsync();
+                selectedClinician = null;
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                ToastService?.ShowError("Clinician not found.");
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                ToastService?.ShowError($"Failed to delete clinician: {errorText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Error deleting clinician: {ex.Message}");
+        }
+    }
+
+    private Color StatusBadgeColor(string status) => string.Equals(status, StatusActive, StringComparison.OrdinalIgnoreCase) ? Color.Success : Color.Error;
+}
+

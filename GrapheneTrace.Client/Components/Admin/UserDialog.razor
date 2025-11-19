@@ -1,4 +1,5 @@
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Core.DTOs.Admin
 @using MudBlazor
 
 <MudDialog Class="pt-4">
@@ -10,10 +11,22 @@
 
                 <MudGrid>
                     <MudItem xs="12" sm="6">
-                        <MudSelect T="string" @bind-Value="FormModel.Role" Label="Role" Variant="Variant.Outlined" Required="true">
-                            <MudSelectItem Value="@RolePatient">Patient</MudSelectItem>
-                            <MudSelectItem Value="@RoleClinician">Clinician</MudSelectItem>
-                        </MudSelect>
+                        @if (IsEdit && (FormModel.Role == RoleClinician || FormModel.Role == RoleAdmin))
+                        {
+                            <MudTextField T="string" Value="@FormModel.Role" Label="Role" Variant="Variant.Outlined" Disabled="true" />
+                        }
+                        else if (IsEdit && FormModel.Role == RolePatient)
+                        {
+                            <MudTextField T="string" Value="@RolePatient" Label="Role" Variant="Variant.Outlined" Disabled="true" />
+                        }
+                        else
+                        {
+                            <MudSelect T="string" @bind-Value="FormModel.Role" Label="Role" Variant="Variant.Outlined" Required="true">
+                                <MudSelectItem Value="@RolePatient">Patient</MudSelectItem>
+                                <MudSelectItem Value="@RoleClinician">Clinician</MudSelectItem>
+                                <MudSelectItem Value="@RoleAdmin">Admin</MudSelectItem>
+                            </MudSelect>
+                        }
                     </MudItem>
                     <MudItem xs="12" sm="6">
                         <MudSelect T="string" @bind-Value="FormModel.Status" Label="Status" Variant="Variant.Outlined" Required="true">
@@ -25,10 +38,19 @@
 
                 @if (FormModel.Role == "Patient")
                 {
-                    <MudTextField T="string" @bind-Value="FormModel.AssignedClinician"
-                                  Label="Assigned Clinician"
-                                  Variant="Variant.Outlined"
-                                  Placeholder="e.g., Dr. Priya Kaur" />
+                    <MudSelect T="string" @bind-Value="FormModel.AssignedClinician"
+                              Label="Assigned Clinician"
+                              Variant="Variant.Outlined"
+                              Placeholder="Select a clinician">
+                        <MudSelectItem Value="@PlaceholderNotAssigned">Not Assigned</MudSelectItem>
+                        @if (AvailableClinicians != null)
+                        {
+                            @foreach (var clinician in AvailableClinicians)
+                            {
+                                <MudSelectItem Value="@clinician.FullName">@clinician.FullName</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
                 }
                 else
                 {
@@ -49,6 +71,16 @@
                                   InputType="InputType.Password"
                                   HelperText="When saved, the user receives an email to update their password." />
                 }
+                else
+                {
+                    <MudTextField T="string" @bind-Value="FormModel.Password"
+                                  Label="New Password (Optional)"
+                                  Variant="Variant.Outlined"
+                                  For="() => FormModel.Password"
+                                  Immediate="true"
+                                  InputType="InputType.Password"
+                                  HelperText="Leave blank to keep current password." />
+                }
             </MudStack>
         </MudForm>
     </DialogContent>
@@ -66,6 +98,7 @@
     private const string PlaceholderNotAssigned = "Not Assigned";
     private const string RolePatient = "Patient";
     private const string RoleClinician = "Clinician";
+    private const string RoleAdmin = "Admin";
     private const string StatusActive = "Active";
     private const string StatusSuspended = "Suspended";
 
@@ -77,6 +110,9 @@
 
     [Parameter]
     public bool IsEdit { get; set; }
+
+    [Parameter]
+    public List<AdminUserDto>? AvailableClinicians { get; set; }
 
     private async Task Save()
     {

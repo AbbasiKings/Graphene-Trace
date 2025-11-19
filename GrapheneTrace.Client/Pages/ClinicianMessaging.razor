@@ -1,215 +1,405 @@
 @page "/clinician/messaging"
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Client.Services
+@using GrapheneTrace.Core.DTOs.Clinician
+@using GrapheneTrace.Core.DTOs.Patient
+@using GrapheneTrace.Core.Enums
+@using GrapheneTrace.Core.Models
 @using MudBlazor
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject AppToastService ToastService
+@inject AuthService AuthService
 
 <PageTitle>Communication &amp; Feedback</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="pa-6 messaging-layout">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
-        <div>
-            <MudText Typo="Typo.h4" Class="fw-bold">Communication Threads</MudText>
-            <MudText Typo="Typo.subtitle2" Class="text-secondary">
-                Continue in-line dialogues tied to flagged events and correlate responses to heat map timestamps.
-            </MudText>
-        </div>
-        <MudChip T="string" Color="Color.Info">Active threads: @Threads.Count</MudChip>
-    </MudStack>
+@if (_loading)
+{
+    <div class="d-flex justify-center my-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(_loadError))
+{
+    <MudAlert Severity="Severity.Error">@_loadError</MudAlert>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-6 messaging-layout">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+            <div>
+                <MudText Typo="Typo.h4" Class="fw-bold">Communication Threads</MudText>
+                <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                    Continue in-line dialogues tied to flagged events and correlate responses to heat map timestamps.
+                </MudText>
+            </div>
+            <MudChip T="string" Color="Color.Info">Active threads: @_threads.Count</MudChip>
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Primary" 
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="async () => await LoadThreadsAsync()"
+                       Size="Size.Small"
+                       Disabled="_loading">
+                Refresh
+            </MudButton>
+        </MudStack>
 
-    <MudGrid Spacing="2">
-        <MudItem xs="12" md="4">
-            <MudPaper Class="pa-0 elevation-2 thread-list">
-                <MudList T="ClinicianMessageThread" Dense="true">
-                    @foreach (var thread in Threads)
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-0 elevation-2 thread-list">
+                    @if (_threads.Count == 0)
                     {
-                        <MudListItem T="ClinicianMessageThread" Class="@GetThreadClass(thread.Id)" OnClick="@(() => SelectThread(thread.Id))">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="1" Class="w-100">
-                                <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body2" Class="fw-semibold">@thread.PatientName (@thread.PatientId)</MudText>
-                                    <MudText Typo="Typo.caption" Class="text-secondary">
-                                        Started @thread.StartedAt.ToString("g") · @thread.Summary
-                                    </MudText>
-                                </MudStack>
-                                <MudIcon Icon="@Icons.Material.Filled.ChatBubbleOutline" Color="Color.Info" />
-                            </MudStack>
-                        </MudListItem>
+                        <MudText Typo="Typo.body2" Class="pa-4 text-secondary">No patients assigned to you yet.</MudText>
                     }
-                </MudList>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="8">
-            <MudPaper Class="pa-0 elevation-2 conversation">
-                <MudCard>
-                    <MudCardHeader>
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                            <MudStack>
-                                <MudText Typo="Typo.h6">@SelectedThread.PatientName</MudText>
-                                <MudText Typo="Typo.caption" Class="text-secondary">Thread linked to frame @SelectedThread.StartedAt.ToString("HH:mm")</MudText>
-                            </MudStack>
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">Patient ID: @SelectedThread.PatientId</MudChip>
-                        </MudStack>
-                    </MudCardHeader>
-                    <MudCardContent Class="conversation-body">
-                        @foreach (var message in SelectedThread.Messages)
-                        {
-                            <div class="message @(message.IsClinician ? "from-clinician" : "from-patient")">
-                                <MudPaper Class="message-bubble" Elevation="2">
-                                    <MudStack Spacing="1">
-                                        <MudText Typo="Typo.caption" Class="text-secondary">
-                                            @(message.IsClinician ? "Clinician" : "Patient") · @message.Timestamp.ToString("g")
-                                        </MudText>
-                                        <MudText Typo="Typo.body2">@message.Body</MudText>
+                    else
+                    {
+                        <MudList T="MessageThreadDto" Dense="true">
+                            @foreach (var thread in _threads)
+                            {
+                                <MudListItem T="MessageThreadDto" Class="@GetThreadClass(thread.PatientId)" OnClick="@(() => SelectThread(thread.PatientId))">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="1" Class="w-100">
+                                        <MudStack Spacing="1">
+                                            <MudText Typo="Typo.body2" Class="fw-semibold">@thread.PatientName</MudText>
+                                            <MudText Typo="Typo.caption" Class="text-secondary">
+                                                @if (thread.Messages.Count > 0)
+                                                {
+                                                    <text>@thread.Messages.Count message(s) · Last: @thread.LastMessageTime?.ToLocalTime().ToString("g")</text>
+                                                }
+                                                else
+                                                {
+                                                    <text>No messages yet - Click to start conversation</text>
+                                                }
+                                            </MudText>
+                                        </MudStack>
+                                        @if (thread.Messages.Count > 0)
+                                        {
+                                            <MudBadge Content="@thread.Messages.Count" Color="Color.Info" Overlap="true">
+                                                <MudIcon Icon="@Icons.Material.Filled.ChatBubbleOutline" Color="Color.Info" />
+                                            </MudBadge>
+                                        }
+                                        else
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.ChatBubbleOutline" Color="Color.Secondary" />
+                                        }
                                     </MudStack>
-                                </MudPaper>
-                            </div>
-                        }
-                    </MudCardContent>
-                    <MudDivider />
-                    <MudCardContent>
-                        <MudTextField @bind-Value="replyText"
-                                      Variant="Variant.Outlined"
-                                      Label="Write a reply"
-                                      Lines="3"
-                                      Placeholder="Summarise next steps, include references to heat map frames or metrics"
-                                      Immediate="true" />
-                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-3">
-                            <MudButton Variant="Variant.Text" Color="Color.Secondary" OnClick="ResetDraft">Discard</MudButton>
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send" Disabled="string.IsNullOrWhiteSpace(replyText)" OnClick="SendReply">
-                                Send Reply
-                            </MudButton>
-                        </MudStack>
-                    </MudCardContent>
-                </MudCard>
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
-</MudContainer>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="8">
+                @if (_selectedThread == null)
+                {
+                    <MudPaper Class="pa-4 elevation-2">
+                        <MudText Typo="Typo.body2" Class="text-secondary">Select a patient thread to view messages.</MudText>
+                    </MudPaper>
+                }
+                else
+                {
+                    <MudPaper Class="pa-0 elevation-2 conversation">
+                        <MudCard>
+                            <MudCardHeader>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudStack>
+                                        <MudText Typo="Typo.h6">@_selectedThread.PatientName</MudText>
+                                        <MudText Typo="Typo.caption" Class="text-secondary">Patient ID: @_selectedThread.PatientId.ToString("N")[..8]</MudText>
+                                    </MudStack>
+                                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">@_selectedThread.Messages.Count messages</MudChip>
+                                </MudStack>
+                            </MudCardHeader>
+                            <MudCardContent Class="conversation-body" Style="min-height: 300px;">
+                                @if (_selectedThread.Messages.Count == 0)
+                                {
+                                    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Style="min-height: 200px; padding: 40px;">
+                                        <MudIcon Icon="@Icons.Material.Filled.ChatBubbleOutline" Size="Size.Large" Color="Color.Secondary" Style="opacity: 0.5;" />
+                                        <MudText Typo="Typo.h6" Class="text-secondary">No messages yet</MudText>
+                                        <MudText Typo="Typo.body2" Class="text-secondary">Start the conversation by sending a message below.</MudText>
+                                        <MudText Typo="Typo.caption" Class="text-secondary" Style="text-align: center; max-width: 400px;">
+                                            Messages can come from:<br />
+                                            • Patient comments from Patient Dashboard<br />
+                                            • Your replies from this page
+                                        </MudText>
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudStack Spacing="2">
+                                        @foreach (var message in _selectedThread.Messages.OrderBy(m => m.Timestamp))
+                                        {
+                                            <div class="message @(message.IsClinician ? "from-clinician" : "from-patient")">
+                                                <MudPaper Class="message-bubble" Elevation="2" Style="min-width: 200px;">
+                                                    <MudStack Spacing="1">
+                                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                            <MudChip T="string" Size="Size.Small" Color="@(message.IsClinician ? Color.Primary : Color.Secondary)">
+                                                                @(message.IsClinician ? "You" : "Patient")
+                                                            </MudChip>
+                                                            <MudText Typo="Typo.caption" Class="text-secondary">
+                                                                @message.Timestamp.ToLocalTime().ToString("g")
+                                                            </MudText>
+                                                        </MudStack>
+                                                        <MudText Typo="Typo.body1" Style="word-wrap: break-word; white-space: pre-wrap;">@message.Body</MudText>
+                                                    </MudStack>
+                                                </MudPaper>
+                                            </div>
+                                        }
+                                    </MudStack>
+                                }
+                            </MudCardContent>
+                            <MudDivider />
+                            <MudCardContent>
+                                <MudTextField @bind-Value="replyText"
+                                              Variant="Variant.Outlined"
+                                              Label="Write a reply"
+                                              Lines="3"
+                                              Placeholder="Summarise next steps, include references to heat map frames or metrics"
+                                              Immediate="true" />
+                                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-3">
+                                    <MudButton Variant="Variant.Text" Color="Color.Secondary" OnClick="ResetDraft">Discard</MudButton>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send" Disabled="string.IsNullOrWhiteSpace(replyText) || _selectedThread == null" OnClick="SendReply">
+                                        Send Reply
+                                    </MudButton>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudPaper>
+                }
+            </MudItem>
+        </MudGrid>
+    </MudContainer>
+}
 
 @code {
-    private readonly IReadOnlyList<ClinicianMessageThread> Threads = new[]
-    {
-        new ClinicianMessageThread(
-            Guid.NewGuid(),
-            "PT-71E66AB3",
-            "Amelia Preston",
-            DateTime.Now.AddHours(-3),
-            "Discomfort during evening walk",
-            new List<ClinicianMessage>
-            {
-                new ClinicianMessage("Patient", DateTime.Now.AddHours(-3), "I noticed sharp pressure on my heel during the evening walk around 7pm.", false),
-                new ClinicianMessage("Clinician", DateTime.Now.AddHours(-2.5), "Thanks Amelia, I see the spike around 19:06. Please reduce activity tonight and elevate foot.", true),
-                new ClinicianMessage("Patient", DateTime.Now.AddHours(-2), "Understood, I'll do that. Should I adjust the orthotic?", false)
-            }),
-        new ClinicianMessageThread(
-            Guid.NewGuid(),
-            "PT-5FF9AA21",
-            "Ella Martinez",
-            DateTime.Now.AddHours(-6),
-            "Follow-up on orthotic fit",
-            new List<ClinicianMessage>
-            {
-                new ClinicianMessage("Patient", DateTime.Now.AddHours(-6), "Fit feels tighter around forefoot this morning.", false),
-                new ClinicianMessage("Clinician", DateTime.Now.AddHours(-5.5), "I'll flag this for review. Please upload a photo if possible.", true)
-            }),
-        new ClinicianMessageThread(
-            Guid.NewGuid(),
-            "PT-5522201B",
-            "Logan Pierce",
-            DateTime.Now.AddHours(-9),
-            "Alert resolved confirmation",
-            new List<ClinicianMessage>
-            {
-                new ClinicianMessage("Clinician", DateTime.Now.AddHours(-9), "Pressure spike resolved in under 2 minutes. Logging as resolved.", true),
-                new ClinicianMessage("Patient", DateTime.Now.AddHours(-8.5), "Thanks, I didn't feel much discomfort this time.", false)
-            })
-    };
-
-    private Guid _selectedThreadId;
+    private bool _loading = true;
+    private string? _loadError;
+    private List<MessageThreadDto> _threads = new();
+    private MessageThreadDto? _selectedThread;
     private string replyText = string.Empty;
 
-    private ClinicianMessageThread SelectedThread => Threads.First(t => t.Id == _selectedThreadId);
-
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        _selectedThreadId = Threads.First().Id;
+        await LoadThreadsAsync();
     }
 
-    private void SelectThread(Guid id)
+    private void EnsureAuthHeader()
     {
-        _selectedThreadId = id;
+        if (!string.IsNullOrEmpty(AuthService.Token))
+        {
+            Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AuthService.Token);
+        }
+    }
+
+    private async Task LoadThreadsAsync()
+    {
+        try
+        {
+            _loading = true;
+            _loadError = null;
+            _threads = new List<MessageThreadDto>();
+            StateHasChanged();
+
+            EnsureAuthHeader();
+
+            // Get all assigned patients
+            List<TriagePatientDto> patients;
+            try
+            {
+                var response = await Http.GetAsync("api/clinician/triage");
+                if (response.IsSuccessStatusCode)
+                {
+                    patients = await response.Content.ReadFromJsonAsync<List<TriagePatientDto>>() ?? new();
+                }
+                else
+                {
+                    _loadError = $"Failed to load patient list: {response.StatusCode}. Please check your connection and try again.";
+                    ToastService?.ShowError(_loadError);
+                    patients = new();
+                }
+            }
+            catch (HttpRequestException httpEx)
+            {
+                _loadError = $"Cannot connect to API server. Please ensure the backend is running on http://localhost:5200. Error: {httpEx.Message}";
+                ToastService?.ShowError(_loadError);
+                patients = new();
+            }
+            catch (TaskCanceledException)
+            {
+                _loadError = "Request timeout. The API server may be slow or not responding.";
+                ToastService?.ShowError(_loadError);
+                patients = new();
+            }
+
+            // For each patient, get their communication history
+            foreach (var patient in patients)
+            {
+                try
+                {
+                    EnsureAuthHeader();
+                    var response = await Http.GetAsync($"api/clinician/patient/{patient.PatientId}");
+                    
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var details = await response.Content.ReadFromJsonAsync<PatientDetailDto>();
+                        if (details != null)
+                        {
+                            var messages = new List<MessageDto>();
+                            
+                            if (details.CommunicationHistory != null && details.CommunicationHistory.Count > 0)
+                            {
+                                messages = details.CommunicationHistory
+                                    .OrderBy(c => c.CreatedAt)
+                                    .Select(c => new MessageDto
+                                    {
+                                        Timestamp = c.CreatedAt,
+                                        Body = c.Text,
+                                        IsClinician = c.AuthorRole == UserRole.Clinician
+                                    })
+                                    .ToList();
+                            }
+
+                            // Show thread even if no messages (so clinician can start conversation)
+                            _threads.Add(new MessageThreadDto
+                            {
+                                PatientId = patient.PatientId,
+                                PatientName = details.Name,
+                                Messages = messages,
+                                LastMessageTime = messages.Count > 0 ? messages.Last().Timestamp : null
+                            });
+                        }
+                    }
+                    else
+                    {
+                        // Log API error
+                        var errorContent = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine($"Error loading patient {patient.PatientId}: {response.StatusCode} - {errorContent}");
+                    }
+                }
+                catch (HttpRequestException httpEx)
+                {
+                    // Network/CORS/API not reachable error
+                    Console.WriteLine($"Network error loading patient {patient.PatientId}: {httpEx.Message}");
+                    // Continue with other patients, don't break the whole loop
+                }
+                catch (TaskCanceledException)
+                {
+                    // Request timeout
+                    Console.WriteLine($"Timeout loading patient {patient.PatientId}");
+                }
+                catch (Exception ex)
+                {
+                    // Other errors
+                    Console.WriteLine($"Error loading patient {patient.PatientId}: {ex.Message}");
+                }
+            }
+
+            if (_threads.Count > 0)
+            {
+                _selectedThread = _threads.First();
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _loadError = $"Unable to reach API: {httpEx.Message}. Please ensure the backend API is running on http://localhost:5200";
+            ToastService?.ShowError(_loadError);
+        }
+        catch (TaskCanceledException)
+        {
+            _loadError = "Request timeout. The API server may be slow or not responding. Please try again.";
+            ToastService?.ShowError(_loadError);
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Error loading threads: {ex.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SelectThread(Guid patientId)
+    {
+        _selectedThread = _threads.FirstOrDefault(t => t.PatientId == patientId);
         replyText = string.Empty;
+        StateHasChanged();
     }
 
-    private string GetThreadClass(Guid id) => id == _selectedThreadId ? "active-thread" : string.Empty;
+    private string GetThreadClass(Guid patientId) => _selectedThread?.PatientId == patientId ? "active-thread" : string.Empty;
 
     private void ResetDraft()
     {
         replyText = string.Empty;
     }
 
-    private void SendReply()
+    private async Task SendReply()
     {
-        if (string.IsNullOrWhiteSpace(replyText))
+        if (string.IsNullOrWhiteSpace(replyText) || _selectedThread == null)
         {
             return;
         }
 
-        // Demo: append to in-memory list
-        var thread = Threads.First(t => t.Id == _selectedThreadId);
-        (thread.Messages as List<ClinicianMessage>)?.Add(new ClinicianMessage("Clinician", DateTime.Now, replyText.Trim(), true));
-        replyText = string.Empty;
+        try
+        {
+            EnsureAuthHeader();
+            var request = new QuickLogDto { CommentText = replyText.Trim() };
+            var response = await Http.PostAsJsonAsync($"api/clinician/patient/{_selectedThread.PatientId}/reply", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var savedText = replyText.Trim();
+                replyText = string.Empty;
+                ToastService?.ShowSuccess("Reply sent successfully.");
+                
+                // Add message immediately to UI for better UX
+                if (_selectedThread != null)
+                {
+                    _selectedThread.Messages.Add(new MessageDto
+                    {
+                        Timestamp = DateTime.UtcNow,
+                        Body = savedText,
+                        IsClinician = true
+                    });
+                    _selectedThread.LastMessageTime = DateTime.UtcNow;
+                }
+                
+                // Reload threads to get latest from server (includes the new message)
+                var currentPatientId = _selectedThread?.PatientId;
+                await LoadThreadsAsync();
+                
+                // Reselect the same thread to show updated messages
+                if (currentPatientId.HasValue)
+                {
+                    SelectThread(currentPatientId.Value);
+                }
+                
+                StateHasChanged();
+            }
+            else
+            {
+                ToastService?.ShowError("Failed to send reply.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Error sending reply: {ex.Message}");
+        }
+    }
+
+    private class MessageThreadDto
+    {
+        public Guid PatientId { get; set; }
+        public string PatientName { get; set; } = string.Empty;
+        public List<MessageDto> Messages { get; set; } = new();
+        public DateTime? LastMessageTime { get; set; }
+    }
+
+    private class MessageDto
+    {
+        public DateTime Timestamp { get; set; }
+        public string Body { get; set; } = string.Empty;
+        public bool IsClinician { get; set; }
     }
 }
-*** End Patch***
-*** Add File: GrapheneTrace.Client/Pages/ClinicianMessaging.razor.css
-.messaging-layout {
-    min-height: calc(100vh - 7rem);
-}
-
-.thread-list {
-    max-height: 620px;
-    overflow-y: auto;
-}
-
-.thread-list .mud-list-item.active-thread {
-    background-color: rgba(25, 118, 210, 0.12);
-}
-
-.conversation {
-    min-height: 620px;
-}
-
-.conversation-body {
-    max-height: 420px;
-    overflow-y: auto;
-    padding: 24px;
-    background: linear-gradient(180deg, rgba(25, 118, 210, 0.08) 0%, rgba(13, 71, 161, 0.1) 100%);
-}
-
-.message {
-    display: flex;
-    margin-bottom: 16px;
-}
-
-.message.from-patient {
-    justify-content: flex-start;
-}
-
-.message.from-clinician {
-    justify-content: flex-end;
-}
-
-.message-bubble {
-    max-width: 80%;
-    padding: 14px 16px;
-    border-radius: 14px;
-}
-
-.message.from-patient .message-bubble {
-    background-color: rgba(255, 255, 255, 0.9);
-}
-
-.message.from-clinician .message-bubble {
-    background-color: rgba(25, 118, 210, 0.12);
-}
-*** End Patch
 

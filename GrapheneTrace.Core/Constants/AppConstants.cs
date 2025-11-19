@@ -14,6 +14,7 @@ public static class AppConstants
     // Analysis defaults
     public const int CsvMatrixSize = 32;
     public const double PressureZeroForceValue = 5;
+    public const double PressureHighThreshold = 60;
     public const double PressureCriticalThreshold = 75;
-    public const int MinPixelAreaForAlert = 4;
+    public const int MinPixelAreaForAlert = 10;
 }

@@ -14,6 +14,7 @@ public class AuthService
     private string? _userEmail;
     private string? _userName;
     private string? _token;
+    private Guid? _userId;
 
     public AuthService(HttpClient httpClient)
     {
@@ -25,6 +26,7 @@ public class AuthService
     public string? UserEmail => _userEmail;
     public string? UserName => _userName;
     public string? Token => _token;
+    public Guid? UserId => _userId;
 
     public event Action? AuthenticationStateChanged;
 
@@ -41,7 +43,7 @@ public class AuthService
 
             if (response.IsSuccessStatusCode && payload.Status)
             {
-                SetAuthenticationState(requestDto.Email, payload.Role, payload.UserName, payload.Token);
+                SetAuthenticationState(requestDto.Email, payload.Role, payload.UserName, payload.Token, payload.UserId);
             }
             else
             {
@@ -63,13 +65,14 @@ public class AuthService
         }
     }
 
-    private void SetAuthenticationState(string email, UserRole role, string userName, string token)
+    private void SetAuthenticationState(string email, UserRole role, string userName, string token, Guid userId)
     {
         _isAuthenticated = true;
         _userEmail = email;
         _role = role;
         _userName = userName;
         _token = token;
+        _userId = userId;
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         AuthenticationStateChanged?.Invoke();
     }
@@ -81,6 +84,7 @@ public class AuthService
         _role = null;
         _userName = null;
         _token = null;
+        _userId = null;
         _httpClient.DefaultRequestHeaders.Authorization = null;
         AuthenticationStateChanged?.Invoke();
     }

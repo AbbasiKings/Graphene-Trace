@@ -1,19 +1,115 @@
 @page "/clinician/patient-analysis"
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Client.Services
+@using GrapheneTrace.Core.DTOs.Clinician
+@using GrapheneTrace.Core.DTOs.Patient
+@using GrapheneTrace.Core.Enums
+@using Microsoft.AspNetCore.Components
 @using MudBlazor
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject AppToastService ToastService
+@inject NavigationManager Navigation
+@inject AuthService AuthService
 
 <PageTitle>Patient Details &amp; Analysis</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
-        <div>
-            <MudText Typo="Typo.h4" Class="fw-bold">Patient Investigation</MudText>
-            <MudText Typo="Typo.subtitle2" Class="text-secondary">
-                Deep dive into historical pressure frames, key metrics, and flagged events.
-            </MudText>
-        </div>
-        <MudChip T="string" Color="Color.Primary">PT-71E66AB3 · Amelia Preston</MudChip>
-    </MudStack>
+@if (_loading)
+{
+    <div class="d-flex justify-center my-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(_loadError) && !_showPatientSelector)
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+        <MudAlert Severity="Severity.Error" Class="mb-4">@_loadError</MudAlert>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshPage">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Class="me-2" />
+            Refresh Page
+        </MudButton>
+    </MudContainer>
+}
+else if (_showPatientSelector)
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+        <MudStack Spacing="3">
+            <div>
+                <MudText Typo="Typo.h4" Class="fw-bold">Select Patient for Analysis</MudText>
+                <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                    Choose a patient to view detailed pressure analysis and metrics.
+                </MudText>
+            </div>
+            @if (_availablePatients.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">No patients assigned to you.</MudAlert>
+            }
+            else
+            {
+                <MudPaper Class="pa-0 elevation-2">
+                    <MudTable T="TriagePatientDto" Items="@_availablePatients" Hover="true" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Patient</MudTh>
+                            <MudTh>Risk</MudTh>
+                            <MudTh>New Alerts</MudTh>
+                            <MudTh>Last Data</MudTh>
+                            <MudTh></MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Patient">
+                                <MudText Typo="Typo.body2" Class="fw-semibold">@context.PatientName</MudText>
+                                <MudText Typo="Typo.caption" Class="text-secondary">@context.PatientId.ToString("N")[..8]</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Risk">
+                                <MudChip T="string" Color="@GetRiskColor(context.HighestRisk)" Size="Size.Small">@context.HighestRisk</MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="New Alerts">
+                                @if (context.NewAlertCount > 0)
+                                {
+                                    <MudBadge Content="@context.NewAlertCount" Color="Color.Error" Overlap="true">
+                                        <MudText Typo="Typo.body2">@context.NewAlertCount</MudText>
+                                    </MudBadge>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2">0</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Last Data">
+                                <MudText Typo="Typo.caption" Class="text-secondary">
+                                    @(context.LastDataReceived?.ToLocalTime().ToString("MMM d · HH:mm") ?? "No data")
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           OnClick="@(() => OnPatientSelected(context.PatientId))">
+                                    View Analysis
+                                </MudButton>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudPaper>
+            }
+        </MudStack>
+    </MudContainer>
+}
+else if (_patientDetail == null)
+{
+    <MudAlert Severity="Severity.Warning">Patient not found or access denied.</MudAlert>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6">
+            <div>
+                <MudText Typo="Typo.h4" Class="fw-bold">Patient Investigation</MudText>
+                <MudText Typo="Typo.subtitle2" Class="text-secondary">
+                    Deep dive into historical pressure frames, key metrics, and flagged events.
+                </MudText>
+            </div>
+            <MudChip T="string" Color="Color.Primary">@_patientDetail.Name (@_patientDetail.Email)</MudChip>
+        </MudStack>
 
     <MudGrid Spacing="2">
         <MudItem xs="12" lg="6">
@@ -30,23 +126,30 @@
                     </MudStack>
                 </MudCardHeader>
                 <MudCardContent>
-                    <div class="heatmap-grid">
-                        @foreach (var row in selectedFrame.Values)
-                        {
-                            <div class="heatmap-row">
-                                @foreach (var value in row)
-                                {
-                                    <div class="heatmap-cell" style="--intensity:@value;"></div>
-                                }
-                            </div>
-                        }
-                    </div>
-                    <MudSlider Min="0"
-                               Max="@(_frames.Count - 1)"
-                               Step="1"
-                               @bind-Value="_selectedFrameIndex"
-                               ValueLabel="true"
-                               Class="mt-4" />
+                    @if (_frames.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="text-secondary">No pressure data available for this patient.</MudText>
+                    }
+                    else
+                    {
+                        <div class="heatmap-grid">
+                            @foreach (var row in selectedFrame.Values)
+                            {
+                                <div class="heatmap-row">
+                                    @foreach (var value in row)
+                                    {
+                                        <div class="heatmap-cell" style="--intensity:@value;"></div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <MudSlider Min="0"
+                                   Max="@(Math.Max(0, _frames.Count - 1))"
+                                   Step="1"
+                                   @bind-Value="_selectedFrameIndex"
+                                   ValueLabel="true"
+                                   Class="mt-4" />
+                    }
                 </MudCardContent>
             </MudCard>
         </MudItem>
@@ -62,14 +165,14 @@
                             <MudPaper Class="metric-card" Elevation="1">
                                 <MudText Typo="Typo.overline" Class="text-secondary">Peak Pressure Index</MudText>
                                 <MudText Typo="Typo.h4">@SelectedPeakPressure.ToString("F1")</MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Warning">+26% vs baseline</MudText>
+                                <MudText Typo="Typo.caption" Color="@GetRiskColor(SelectedRiskLevel)">@GetRiskLabel(SelectedRiskLevel)</MudText>
                             </MudPaper>
                         </MudItem>
                         <MudItem xs="12" sm="6">
                             <MudPaper Class="metric-card" Elevation="1">
                                 <MudText Typo="Typo.overline" Class="text-secondary">Contact Area %</MudText>
                                 <MudText Typo="Typo.h4">@SelectedContactArea.ToString("F1")%</MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Success">Within clinician range</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Success">Current reading</MudText>
                             </MudPaper>
                         </MudItem>
                     </MudGrid>
@@ -82,10 +185,24 @@
                     </MudSelect>
                     <MudTabs Rounded="true" Class="mt-4">
                         <MudTabPanel Text="Peak Pressure Index">
-                            <MudChart ChartType="ChartType.Line" XAxisLabels="@MetricLabels" ChartSeries="@PpiSeries" />
+                            @if (PpiSeries.Count > 0 && PpiSeries[0].Data.Length > 0)
+                            {
+                                <MudChart ChartType="ChartType.Line" XAxisLabels="@MetricLabels" ChartSeries="@PpiSeries" />
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="text-secondary">No trend data available.</MudText>
+                            }
                         </MudTabPanel>
                         <MudTabPanel Text="Contact Area %">
-                            <MudChart ChartType="ChartType.Line" XAxisLabels="@MetricLabels" ChartSeries="@ContactAreaSeries" />
+                            @if (ContactAreaSeries.Count > 0 && ContactAreaSeries[0].Data.Length > 0)
+                            {
+                                <MudChart ChartType="ChartType.Line" XAxisLabels="@MetricLabels" ChartSeries="@ContactAreaSeries" />
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="text-secondary">No trend data available.</MudText>
+                            }
                         </MudTabPanel>
                     </MudTabs>
                 </MudCardContent>
@@ -101,15 +218,22 @@
                     <MudText Typo="Typo.caption" Class="text-secondary">Important clinician and patient events.</MudText>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudTimeline>
-                        @foreach (var marker in TimelineMarkers)
-                        {
-                            <MudTimelineItem Color="Color.Primary" Icon="@Icons.Material.Filled.Flag">
-                                <MudText Typo="Typo.body2" Class="fw-semibold">@marker.Timestamp.ToString("g")</MudText>
-                                <MudText Typo="Typo.body2">@marker.Label</MudText>
-                            </MudTimelineItem>
-                        }
-                    </MudTimeline>
+                    @if (_timelineMarkers.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="text-secondary">No timeline events available.</MudText>
+                    }
+                    else
+                    {
+                        <MudTimeline>
+                            @foreach (var marker in _timelineMarkers)
+                            {
+                                <MudTimelineItem Color="@marker.Color" Icon="@Icons.Material.Filled.Flag">
+                                    <MudText Typo="Typo.body2" Class="fw-semibold">@marker.Timestamp.ToLocalTime().ToString("g")</MudText>
+                                    <MudText Typo="Typo.body2">@marker.Label</MudText>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                    }
                 </MudCardContent>
             </MudCard>
         </MudItem>
@@ -119,94 +243,455 @@
                     <MudText Typo="Typo.h6">Next Steps &amp; Notes</MudText>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudList T="string" Dense="true">
-                        <MudListItem>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Color="Color.Warning" />
-                                <MudText>Schedule follow-up video consult within 24 hours due to repeated heel hotspots.</MudText>
-                            </MudStack>
-                        </MudListItem>
-                        <MudListItem>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.InsertChart" Color="Color.Primary" />
-                                <MudText>Compare pressure map against pre-orthotic baseline to confirm improvement trajectory.</MudText>
-                            </MudStack>
-                        </MudListItem>
-                        <MudListItem>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.Chat" Color="Color.Info" />
-                                <MudText>Reply to patient feedback referencing discomfort reported during evening walk.</MudText>
-                            </MudStack>
-                        </MudListItem>
-                    </MudList>
+                    @if (_nextSteps.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="text-secondary">No action items at this time.</MudText>
+                    }
+                    else
+                    {
+                        <MudList T="string" Dense="true">
+                            @foreach (var step in _nextSteps)
+                            {
+                                <MudListItem>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudIcon Icon="@step.Icon" Color="@step.Color" />
+                                        <MudText>@step.Text</MudText>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
                 </MudCardContent>
             </MudCard>
         </MudItem>
     </MudGrid>
-</MudContainer>
+    </MudContainer>
+}
 
 @code {
-    private readonly List<HeatMapFrame> _frames = new()
-    {
-        new HeatMapFrame(DateTime.Now.AddMinutes(-45), GenerateFrame(seed: 5)),
-        new HeatMapFrame(DateTime.Now.AddMinutes(-30), GenerateFrame(seed: 12)),
-        new HeatMapFrame(DateTime.Now.AddMinutes(-18), GenerateFrame(seed: 21)),
-        new HeatMapFrame(DateTime.Now.AddMinutes(-12), GenerateFrame(seed: 33)),
-        new HeatMapFrame(DateTime.Now.AddMinutes(-6), GenerateFrame(seed: 41)),
-        new HeatMapFrame(DateTime.Now, GenerateFrame(seed: 48))
-    };
-
-    private readonly IReadOnlyList<TimelineMarker> TimelineMarkers = new[]
-    {
-        new TimelineMarker(DateTime.Now.AddMinutes(-40), "AI flagged sustained pressure > 26% above baseline", Color.Warning),
-        new TimelineMarker(DateTime.Now.AddMinutes(-32), "Patient reported discomfort during evening walk", Color.Info),
-        new TimelineMarker(DateTime.Now.AddMinutes(-27), "Clinician acknowledged alert and began review", Color.Secondary),
-        new TimelineMarker(DateTime.Now.AddMinutes(-18), "Heel offloading instructions sent to patient app", Color.Success)
-    };
-
-    private readonly string[] MetricLabels = { "-45", "-30", "-18", "-12", "-6", "Now" };
-
-    private readonly List<ChartSeries> PpiSeries = new()
-    {
-        new ChartSeries { Name = "Peak Pressure Index", Data = new double[] { 8.4, 9.1, 9.8, 10.6, 11.1, 11.6 } },
-        new ChartSeries { Name = "Baseline", Data = new double[] { 7.3, 7.3, 7.3, 7.3, 7.3, 7.3 } }
-    };
-
-    private readonly List<ChartSeries> ContactAreaSeries = new()
-    {
-        new ChartSeries { Name = "Contact Area %", Data = new double[] { 64, 63, 62, 61, 60, 59 } },
-        new ChartSeries { Name = "Target", Data = new double[] { 58, 58, 58, 58, 58, 58 } }
-    };
-
-    private int _selectedFrameIndex = 4;
+    private bool _loading = true;
+    private string? _loadError;
+    private PatientDetailDto? _patientDetail;
+    private Guid _patientId;
+    private List<HeatMapFrame> _frames = new();
+    private List<TimelineMarker> _timelineMarkers = new();
+    private List<(string Icon, Color Color, string Text)> _nextSteps = new();
+    private string[] _metricLabels = Array.Empty<string>();
+    private List<ChartSeries> _ppiSeries = new();
+    private List<ChartSeries> _contactAreaSeries = new();
+    private int _selectedFrameIndex = 0;
     private TimelineRange _selectedRange = TimelineRange.Last6Hours;
 
-    private HeatMapFrame selectedFrame => _frames[_selectedFrameIndex];
+    private List<TriagePatientDto> _availablePatients = new();
+    private bool _showPatientSelector = false;
 
-    private double SelectedPeakPressure => PpiSeries[0].Data[_selectedFrameIndex];
-    private double SelectedContactArea => ContactAreaSeries[0].Data[_selectedFrameIndex];
-
-    private static IReadOnlyList<IReadOnlyList<int>> GenerateFrame(int seed)
+    protected override async Task OnInitializedAsync()
     {
-        var random = new Random(seed);
-        var rows = new List<IReadOnlyList<int>>(16);
-        for (var r = 0; r < 16; r++)
+        // Parse query parameter from URL manually
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = uri.Query;
+        string? patientIdParam = null;
+        
+        if (!string.IsNullOrEmpty(query) && query.StartsWith("?"))
         {
-            var row = new List<int>(16);
-            for (var c = 0; c < 16; c++)
+            var queryParts = query.Substring(1).Split('&');
+            foreach (var part in queryParts)
             {
-                // Simulate normalized intensity (0-100)
-                var value = random.Next(10, 85);
-                if (r > 9 && c is > 6 and < 11)
+                var keyValue = part.Split('=');
+                if (keyValue.Length == 2 && keyValue[0] == "patientId")
                 {
-                    value = random.Next(70, 100);
+                    patientIdParam = Uri.UnescapeDataString(keyValue[1]);
+                    break;
                 }
-                row.Add(value);
             }
-            rows.Add(row);
         }
-        return rows;
+
+        // Load available patients first
+        await LoadAvailablePatientsAsync();
+
+        if (!string.IsNullOrEmpty(patientIdParam) && Guid.TryParse(patientIdParam, out var patientId))
+        {
+            // Verify patient is in the available patients list before trying to load
+            var isAvailable = _availablePatients.Any(p => p.PatientId == patientId);
+            if (isAvailable)
+            {
+                _patientId = patientId;
+                await LoadPatientDataAsync();
+            }
+            else
+            {
+                _loadError = $"Patient with ID {patientId} is not in your assigned patients list. Please select a patient from the list below.";
+                _showPatientSelector = true;
+                _loading = false;
+            }
+        }
+        else
+        {
+            _showPatientSelector = true;
+            _loading = false;
+        }
     }
+
+    private async Task LoadAvailablePatientsAsync()
+    {
+        try
+        {
+            EnsureAuthHeader();
+            _availablePatients = await Http.GetFromJsonAsync<List<TriagePatientDto>>("api/clinician/triage") ?? new();
+        }
+        catch
+        {
+            _availablePatients = new List<TriagePatientDto>();
+        }
+    }
+
+    private void EnsureAuthHeader()
+    {
+        if (!string.IsNullOrEmpty(AuthService.Token))
+        {
+            Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AuthService.Token);
+        }
+    }
+
+    private async Task RefreshPage()
+    {
+        _loading = true;
+        _loadError = null;
+        _showPatientSelector = false;
+        _patientDetail = null;
+        StateHasChanged();
+        
+        // Reload everything
+        await LoadAvailablePatientsAsync();
+        
+        // Parse query parameter again
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = uri.Query;
+        string? patientIdParam = null;
+        
+        if (!string.IsNullOrEmpty(query) && query.StartsWith("?"))
+        {
+            var queryParts = query.Substring(1).Split('&');
+            foreach (var part in queryParts)
+            {
+                var keyValue = part.Split('=');
+                if (keyValue.Length == 2 && keyValue[0] == "patientId")
+                {
+                    patientIdParam = Uri.UnescapeDataString(keyValue[1]);
+                    break;
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(patientIdParam) && Guid.TryParse(patientIdParam, out var patientId))
+        {
+            var isAvailable = _availablePatients.Any(p => p.PatientId == patientId);
+            if (isAvailable)
+            {
+                _patientId = patientId;
+                await LoadPatientDataAsync();
+            }
+            else
+            {
+                _loadError = $"Patient with ID {patientId} is not in your assigned patients list.";
+                _showPatientSelector = true;
+                _loading = false;
+            }
+        }
+        else
+        {
+            _showPatientSelector = true;
+            _loading = false;
+        }
+    }
+
+    private async Task OnPatientSelected(Guid patientId)
+    {
+        _patientId = patientId;
+        _showPatientSelector = false;
+        _loading = true;
+        _loadError = null;
+        StateHasChanged();
+        
+        // Update URL without triggering full page reload
+        Navigation.NavigateTo($"/clinician/patient-analysis?patientId={patientId}", false);
+        await LoadPatientDataAsync();
+    }
+
+    private async Task LoadPatientDataAsync()
+    {
+        try
+        {
+            _loading = true;
+            _loadError = null;
+            StateHasChanged();
+
+            EnsureAuthHeader();
+            var response = await Http.GetAsync($"api/clinician/patient/{_patientId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                _patientDetail = await response.Content.ReadFromJsonAsync<PatientDetailDto>();
+
+                if (_patientDetail == null)
+                {
+                    _loadError = "Patient not found or access denied.";
+                    return;
+                }
+
+                await LoadHeatmapFramesAsync();
+                BuildCharts();
+                BuildTimeline();
+                BuildNextSteps();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // Reload patient list to get latest assignments
+                await LoadAvailablePatientsAsync();
+                
+                // Check if patient is still in available patients list
+                var isInList = _availablePatients.Any(p => p.PatientId == _patientId);
+                if (isInList)
+                {
+                    // Patient is in list but access denied - this means:
+                    // 1. Patient was in triage list (assigned to you)
+                    // 2. But when trying to get details, backend says not assigned
+                    // This could be a database inconsistency or the patient was unassigned
+                    _loadError = $"Patient was found in your list but access was denied. This may happen if:\n• The patient was unassigned from you\n• There's a database inconsistency\n• Please select a patient from the updated list below.";
+                    ToastService?.ShowWarning("Patient access denied. Please select from the list.");
+                    _showPatientSelector = true;
+                }
+                else
+                {
+                    _loadError = $"Patient with ID {_patientId} is not in your assigned patients list. Please select a patient from the list below.";
+                    _showPatientSelector = true;
+                    ToastService?.ShowError(_loadError);
+                }
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                _loadError = "Authentication required. Please log in again.";
+                ToastService?.ShowError(_loadError);
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _loadError = $"API error ({(int)response.StatusCode}): {errorContent}";
+                ToastService?.ShowError(_loadError);
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _loadError = $"Unable to reach API: {httpEx.Message}. Please ensure the backend is running on http://localhost:5200";
+            ToastService?.ShowError(_loadError);
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Error loading patient data: {ex.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadHeatmapFramesAsync()
+    {
+        if (_patientDetail?.MetricTrends == null || _patientDetail.MetricTrends.Count == 0)
+        {
+            return;
+        }
+
+        _frames = new List<HeatMapFrame>();
+        var recentTrends = _patientDetail.MetricTrends.Take(10).ToList(); // Last 10 frames
+
+            foreach (var trend in recentTrends)
+            {
+                try
+                {
+                    EnsureAuthHeader();
+                    var rawData = await Http.GetFromJsonAsync<RawPatientDataDto>($"api/clinician/data/{trend.PatientDataId}/raw");
+                if (rawData != null && !string.IsNullOrEmpty(rawData.RawCsvData))
+                {
+                    var matrix = ParseCsvToMatrix(rawData.RawCsvData);
+                    _frames.Add(new HeatMapFrame(rawData.Timestamp, matrix));
+                }
+            }
+            catch
+            {
+                // Skip frames that fail to load
+            }
+        }
+
+        if (_frames.Count > 0)
+        {
+            _selectedFrameIndex = _frames.Count - 1; // Select latest frame
+        }
+    }
+
+    private static IReadOnlyList<IReadOnlyList<int>> ParseCsvToMatrix(string csvData)
+    {
+        var rows = csvData
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(row => row.Split(',', StringSplitOptions.TrimEntries))
+            .ToArray();
+
+        var matrix = new List<IReadOnlyList<int>>();
+        for (var i = 0; i < Math.Min(32, rows.Length); i++)
+        {
+            var row = new List<int>();
+            for (var j = 0; j < Math.Min(32, rows[i].Length); j++)
+            {
+                if (int.TryParse(rows[i][j], out var value))
+                {
+                    row.Add(value);
+                }
+                else
+                {
+                    row.Add(0);
+                }
+            }
+            while (row.Count < 32) row.Add(0);
+            matrix.Add(row);
+        }
+        while (matrix.Count < 32) matrix.Add(Enumerable.Repeat(0, 32).ToList());
+
+        return matrix;
+    }
+
+    private void BuildCharts()
+    {
+        if (_patientDetail?.MetricTrends == null || _patientDetail.MetricTrends.Count == 0)
+        {
+            return;
+        }
+
+        var trends = _patientDetail.MetricTrends.OrderBy(t => t.Timestamp).Take(20).ToList();
+        _metricLabels = trends.Select(t => t.Timestamp.ToLocalTime().ToString("HH:mm")).ToArray();
+
+        var ppiData = trends.Select(t => t.PeakPressureIndex).ToArray();
+        var contactData = trends.Select(t => t.ContactAreaPercent).ToArray();
+
+        _ppiSeries = new List<ChartSeries>
+        {
+            new ChartSeries { Name = "Peak Pressure Index", Data = ppiData }
+        };
+
+        _contactAreaSeries = new List<ChartSeries>
+        {
+            new ChartSeries { Name = "Contact Area %", Data = contactData }
+        };
+    }
+
+    private void BuildTimeline()
+    {
+        _timelineMarkers = new List<TimelineMarker>();
+
+        if (_patientDetail?.ActiveAlerts != null)
+        {
+            foreach (var alert in _patientDetail.ActiveAlerts.OrderByDescending(a => a.CreatedAt).Take(5))
+            {
+                _timelineMarkers.Add(new TimelineMarker(
+                    alert.CreatedAt,
+                    $"Alert: {alert.Reason}",
+                    GetRiskColor(alert.RiskLevel)
+                ));
+            }
+        }
+
+        if (_patientDetail?.CommunicationHistory != null)
+        {
+            foreach (var comment in _patientDetail.CommunicationHistory.OrderByDescending(c => c.CreatedAt).Take(5))
+            {
+                var isPatient = comment.AuthorRole == UserRole.Patient;
+                var textPreview = comment.Text.Length > 50 ? comment.Text[..50] + "..." : comment.Text;
+                _timelineMarkers.Add(new TimelineMarker(
+                    comment.CreatedAt,
+                    $"{(isPatient ? "Patient" : "Clinician")}: {textPreview}",
+                    isPatient ? Color.Info : Color.Secondary
+                ));
+            }
+        }
+
+        _timelineMarkers = _timelineMarkers.OrderByDescending(m => m.Timestamp).ToList();
+    }
+
+    private void BuildNextSteps()
+    {
+        _nextSteps = new List<(string Icon, Color Color, string Text)>();
+
+        if (_patientDetail?.ActiveAlerts != null && _patientDetail.ActiveAlerts.Any(a => a.Status == AlertStatus.New))
+        {
+            var newAlerts = _patientDetail.ActiveAlerts.Count(a => a.Status == AlertStatus.New);
+            _nextSteps.Add((
+                Icons.Material.Filled.NotificationsActive,
+                Color.Warning,
+                $"Review {newAlerts} new alert(s) requiring attention."
+            ));
+        }
+
+        if (_patientDetail?.CommunicationHistory != null)
+        {
+            var unreadPatientComments = _patientDetail.CommunicationHistory
+                .Where(c => c.AuthorRole == UserRole.Patient)
+                .Count(c => c.CreatedAt > DateTime.UtcNow.AddDays(-1));
+            if (unreadPatientComments > 0)
+            {
+                _nextSteps.Add((
+                    Icons.Material.Filled.Chat,
+                    Color.Info,
+                    $"Reply to {unreadPatientComments} recent patient comment(s)."
+                ));
+            }
+        }
+
+        if (_patientDetail?.ActiveAlerts != null && _patientDetail.ActiveAlerts.Any(a => a.RiskLevel >= RiskLevel.High))
+        {
+            _nextSteps.Add((
+                Icons.Material.Filled.InsertChart,
+                Color.Error,
+                "Schedule follow-up consultation for high-risk alerts."
+            ));
+        }
+    }
+
+    private HeatMapFrame selectedFrame => _frames.Count > 0 && _selectedFrameIndex < _frames.Count
+        ? _frames[_selectedFrameIndex]
+        : new HeatMapFrame(DateTime.Now, Enumerable.Repeat(Enumerable.Repeat(0, 32).ToList(), 32).ToList());
+
+    private double SelectedPeakPressure => _patientDetail?.MetricTrends?.Count > _selectedFrameIndex
+        ? _patientDetail.MetricTrends[_selectedFrameIndex].PeakPressureIndex
+        : 0;
+
+    private double SelectedContactArea => _patientDetail?.MetricTrends?.Count > _selectedFrameIndex
+        ? _patientDetail.MetricTrends[_selectedFrameIndex].ContactAreaPercent
+        : 0;
+
+    private RiskLevel SelectedRiskLevel => _patientDetail?.MetricTrends?.Count > _selectedFrameIndex
+        ? _patientDetail.MetricTrends[_selectedFrameIndex].RiskLevel
+        : RiskLevel.Low;
+
+    private List<ChartSeries> PpiSeries => _ppiSeries;
+    private List<ChartSeries> ContactAreaSeries => _contactAreaSeries;
+    private string[] MetricLabels => _metricLabels;
+
+    private static Color GetRiskColor(RiskLevel risk) => risk switch
+    {
+        RiskLevel.Critical => Color.Error,
+        RiskLevel.High => Color.Warning,
+        RiskLevel.Medium => Color.Info,
+        _ => Color.Success
+    };
+
+    private static string GetRiskLabel(RiskLevel risk) => risk switch
+    {
+        RiskLevel.Critical => "Critical risk level",
+        RiskLevel.High => "High risk level",
+        RiskLevel.Medium => "Medium risk level",
+        _ => "Low risk level"
+    };
 
     private enum TimelineRange
     {

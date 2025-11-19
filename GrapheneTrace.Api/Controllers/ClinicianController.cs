@@ -19,8 +19,16 @@ public class ClinicianController(IClinicianService clinicianService) : Controlle
     public async Task<IActionResult> GetTriage(CancellationToken cancellationToken)
     {
         var clinicianId = GetUserId();
-        var data = await _clinicianService.GetTriageAsync(clinicianId, cancellationToken);
+        var data = await _clinicianService.GetTriageListAsync(clinicianId, cancellationToken);
         return Ok(data);
+    }
+
+    [HttpGet("patient/{patientId:guid}")]
+    public async Task<IActionResult> GetPatientDetails(Guid patientId, CancellationToken cancellationToken)
+    {
+        var clinicianId = GetUserId();
+        var details = await _clinicianService.GetPatientDetailsAsync(patientId, clinicianId, cancellationToken);
+        return details is null ? NotFound() : Ok(details);
     }
 
     [HttpGet("data/{dataId:guid}/raw")]

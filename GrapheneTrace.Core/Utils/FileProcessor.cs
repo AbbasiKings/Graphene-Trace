@@ -33,12 +33,64 @@ public static class FileProcessor
 
     public static double CalculatePeakPressureIndex(int[,] matrix)
     {
+        var size = AppConstants.CsvMatrixSize;
+        var visited = new bool[size, size];
+        var filtered = (int[,])matrix.Clone();
         var max = 0;
-        foreach (var value in matrix)
+
+        for (var row = 0; row < size; row++)
         {
-            if (value > max)
+            for (var col = 0; col < size; col++)
             {
-                max = value;
+                if (filtered[row, col] <= 0 || visited[row, col])
+                {
+                    continue;
+                }
+
+                var positions = new List<(int r, int c)>();
+                var queue = new Queue<(int r, int c)>();
+                queue.Enqueue((row, col));
+                visited[row, col] = true;
+
+                var componentMax = 0;
+
+                while (queue.Count > 0)
+                {
+                    var (cr, cc) = queue.Dequeue();
+                    positions.Add((cr, cc));
+
+                    var value = filtered[cr, cc];
+                    if (value > componentMax)
+                    {
+                        componentMax = value;
+                    }
+
+                    foreach (var (nr, nc) in GetNeighbors(cr, cc, size))
+                    {
+                        if (visited[nr, nc] || filtered[nr, nc] <= 0)
+                        {
+                            continue;
+                        }
+
+                        visited[nr, nc] = true;
+                        queue.Enqueue((nr, nc));
+                    }
+                }
+
+                if (positions.Count < AppConstants.MinPixelAreaForAlert)
+                {
+                    foreach (var (r, c) in positions)
+                    {
+                        filtered[r, c] = 0;
+                    }
+                }
+                else
+                {
+                    if (componentMax > max)
+                    {
+                        max = componentMax;
+                    }
+                }
             }
         }
 
@@ -59,17 +111,33 @@ public static class FileProcessor
             return RiskLevel.Critical;
         }
 
-        if (peakPressureIndex >= AppConstants.PressureCriticalThreshold * 0.8)
+        if (peakPressureIndex >= AppConstants.PressureHighThreshold)
         {
             return RiskLevel.High;
         }
 
-        if (peakPressureIndex >= AppConstants.PressureCriticalThreshold * 0.5)
+        if (peakPressureIndex >= AppConstants.PressureHighThreshold * 0.75)
         {
             return RiskLevel.Medium;
         }
 
         return RiskLevel.Low;
+    }
+
+    private static IEnumerable<(int r, int c)> GetNeighbors(int row, int col, int size)
+    {
+        int[] dr = { -1, 1, 0, 0 };
+        int[] dc = { 0, 0, -1, 1 };
+
+        for (var i = 0; i < dr.Length; i++)
+        {
+            var nr = row + dr[i];
+            var nc = col + dc[i];
+            if (nr >= 0 && nr < size && nc >= 0 && nc < size)
+            {
+                yield return (nr, nc);
+            }
+        }
     }
 }
 

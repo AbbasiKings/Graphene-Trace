@@ -37,6 +37,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany(pd => pd.Alerts)
             .HasForeignKey(a => a.PatientDataId);
 
+        modelBuilder.Entity<Alert>()
+            .HasOne(a => a.Patient)
+            .WithMany()
+            .HasForeignKey(a => a.PatientId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         modelBuilder.Entity<Comment>()
             .HasOne(c => c.Patient)
             .WithMany()
@@ -48,6 +54,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany(u => u.Comments)
             .HasForeignKey(c => c.AuthorId)
             .OnDelete(DeleteBehavior.Restrict);
+
     }
 }
 
