@@ -57,8 +57,10 @@ public class AnalysisService(AppDbContext dbContext, ILogger<AnalysisService> lo
 
     public async Task<DashboardSummaryDto> GetDashboardSummaryAsync(Guid patientId, CancellationToken cancellationToken = default)
     {
-        var patient = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == patientId, cancellationToken)
-                      ?? throw new KeyNotFoundException("Patient not found.");
+        var patient = await _dbContext.Users
+            .Include(u => u.AssignedClinician)
+            .FirstOrDefaultAsync(u => u.Id == patientId, cancellationToken)
+            ?? throw new KeyNotFoundException("Patient not found.");
 
         var latestData = await _dbContext.PatientData
             .Where(pd => pd.PatientId == patientId)
@@ -104,6 +106,24 @@ public class AnalysisService(AppDbContext dbContext, ILogger<AnalysisService> lo
             })
             .FirstOrDefaultAsync(cancellationToken);
 
+        // Get assigned clinician name
+        var assignedClinicianName = patient.AssignedClinician?.FullName;
+
+        // Get all comments (both patient and clinician)
+        var allComments = await _dbContext.Comments
+            .Include(c => c.Author)
+            .Where(c => c.PatientId == patientId)
+            .OrderBy(c => c.CreatedAt)
+            .Select(c => new PatientMessageDto
+            {
+                MessageId = c.Id,
+                AuthorName = c.Author.FullName,
+                Message = c.Text,
+                Timestamp = c.CreatedAt,
+                IsClinician = c.Author.Role == UserRole.Clinician
+            })
+            .ToListAsync(cancellationToken);
+
         return new DashboardSummaryDto
         {
             CurrentRiskIndicator = latestData?.RiskLevel ?? RiskLevel.Low,
@@ -112,7 +132,9 @@ public class AnalysisService(AppDbContext dbContext, ILogger<AnalysisService> lo
             LastFrameTimestamp = latestData?.Timestamp,
             AlertSummary = alertSummary,
             LatestClinicianReply = latestClinicianReply,
-            RecentAlerts = recentAlerts
+            RecentAlerts = recentAlerts,
+            AssignedClinicianName = assignedClinicianName,
+            AllComments = allComments
         };
     }
 
@@ -300,6 +322,361 @@ public class AnalysisService(AppDbContext dbContext, ILogger<AnalysisService> lo
         }
 
         return null;
+    }
+
+    public async Task<PatientProfileDto> GetProfileAsync(Guid patientId, CancellationToken cancellationToken = default)
+    {
+        var patient = await _dbContext.Users
+            .Include(u => u.AssignedClinician)
+            .FirstOrDefaultAsync(u => u.Id == patientId, cancellationToken)
+            ?? throw new KeyNotFoundException("Patient not found.");
+
+        return new PatientProfileDto
+        {
+            FullName = patient.FullName,
+            Email = patient.Email,
+            DateOfBirth = patient.DateOfBirth,
+            PhoneNumber = patient.PhoneNumber,
+            Address = patient.Address,
+            CreatedAt = patient.CreatedAt,
+            LastLoginAt = patient.LastLoginAt,
+            AssignedClinician = patient.AssignedClinician != null
+                ? new AssignedClinicianDto
+                {
+                    FullName = patient.AssignedClinician.FullName,
+                    Email = patient.AssignedClinician.Email,
+                    PhoneNumber = patient.AssignedClinician.PhoneNumber,
+                    Specialization = null, // Not stored in User model currently
+                    ClinicName = null // Not stored in User model currently
+                }
+                : null
+        };
+    }
+
+    public async Task<PatientProfileDto> UpdateProfileAsync(Guid patientId, UpdatePatientProfileDto updateDto, CancellationToken cancellationToken = default)
+    {
+        var patient = await _dbContext.Users
+            .Include(u => u.AssignedClinician)
+            .FirstOrDefaultAsync(u => u.Id == patientId, cancellationToken)
+            ?? throw new KeyNotFoundException("Patient not found.");
+
+        // Update patient properties
+        patient.FullName = updateDto.FullName;
+        patient.DateOfBirth = updateDto.DateOfBirth;
+        patient.PhoneNumber = updateDto.PhoneNumber;
+        patient.Address = updateDto.Address;
+        patient.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new PatientProfileDto
+        {
+            FullName = patient.FullName,
+            Email = patient.Email,
+            DateOfBirth = patient.DateOfBirth,
+            PhoneNumber = patient.PhoneNumber,
+            Address = patient.Address,
+            CreatedAt = patient.CreatedAt,
+            LastLoginAt = patient.LastLoginAt,
+            AssignedClinician = patient.AssignedClinician != null
+                ? new AssignedClinicianDto
+                {
+                    FullName = patient.AssignedClinician.FullName,
+                    Email = patient.AssignedClinician.Email,
+                    PhoneNumber = patient.AssignedClinician.PhoneNumber,
+                    Specialization = null,
+                    ClinicName = null
+                }
+                : null
+        };
+    }
+
+    public async Task<bool> ChangePasswordAsync(Guid patientId, ChangePasswordDto changePasswordDto, CancellationToken cancellationToken = default)
+    {
+        var patient = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == patientId, cancellationToken)
+            ?? throw new KeyNotFoundException("Patient not found.");
+
+        // Verify current password
+        if (!SecurityUtils.VerifyPassword(changePasswordDto.CurrentPassword, patient.PasswordHash))
+        {
+            return false;
+        }
+
+        // Update password
+        patient.PasswordHash = SecurityUtils.HashPassword(changePasswordDto.NewPassword);
+        patient.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<byte[]?> GenerateReportAsync(Guid patientId, string reportType, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var patient = await _dbContext.Users
+                .FirstOrDefaultAsync(u => u.Id == patientId, cancellationToken);
+
+            if (patient == null)
+            {
+                _logger.LogWarning("Patient not found: {PatientId}", patientId);
+                return null;
+            }
+
+            // Get patient data for the report
+            var now = DateTime.UtcNow;
+            DateTime? fromDate = reportType.ToLowerInvariant() switch
+            {
+                "daily" => now.AddDays(-1),
+                "weekly" => now.AddDays(-7),
+                "clinician-summary" => null, // All data
+                _ => now.AddDays(-1)
+            };
+
+            var query = _dbContext.PatientData
+                .Where(pd => pd.PatientId == patientId);
+
+            if (fromDate.HasValue)
+            {
+                query = query.Where(pd => pd.Timestamp >= fromDate.Value);
+            }
+
+            var dataPoints = await query
+                .OrderBy(pd => pd.Timestamp)
+                .ToListAsync(cancellationToken);
+
+            _logger.LogInformation("Generating {ReportType} report for patient {PatientId}, found {Count} data points", 
+                reportType, patientId, dataPoints.Count);
+
+            // Generate a simple PDF report
+            // For now, we'll create a basic text-based PDF
+            // In production, you might want to use a library like QuestPDF, iTextSharp, or PdfSharp
+            var reportContent = GenerateReportContent(patient, dataPoints, reportType);
+            
+            if (string.IsNullOrWhiteSpace(reportContent))
+            {
+                _logger.LogWarning("Generated empty report content for patient {PatientId}", patientId);
+                reportContent = $"Report: {reportType.ToUpperInvariant()}\nPatient: {patient.FullName}\nGenerated: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC\n\nNo data available for the selected period.";
+            }
+            
+            var pdfBytes = GenerateSimplePdf(reportContent);
+            
+            _logger.LogInformation("Generated PDF report, size: {Size} bytes", pdfBytes?.Length ?? 0);
+
+            return pdfBytes;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating report for patient {PatientId}, type {ReportType}", patientId, reportType);
+            return null;
+        }
+    }
+
+    private static string GenerateReportContent(Core.Models.User patient, List<PatientData> dataPoints, string reportType)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("=".PadRight(60, '='));
+        sb.AppendLine($"  {reportType.ToUpperInvariant()} REPORT");
+        sb.AppendLine("=".PadRight(60, '='));
+        sb.AppendLine();
+        sb.AppendLine($"Patient Name: {patient.FullName}");
+        sb.AppendLine($"Email: {patient.Email ?? "N/A"}");
+        sb.AppendLine($"Report Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
+        sb.AppendLine($"Report Type: {reportType}");
+        sb.AppendLine();
+        sb.AppendLine("-".PadRight(60, '-'));
+        sb.AppendLine($"Total Data Points: {dataPoints.Count}");
+        sb.AppendLine("-".PadRight(60, '-'));
+
+        if (dataPoints.Count > 0)
+        {
+            var avgPeakPressure = dataPoints.Average(p => p.PeakPressureIndex);
+            var avgContactArea = dataPoints.Average(p => p.ContactAreaPercent);
+            var minPeakPressure = dataPoints.Min(p => p.PeakPressureIndex);
+            var maxPeakPressure = dataPoints.Max(p => p.PeakPressureIndex);
+            var highRiskCount = dataPoints.Count(p => p.RiskLevel == RiskLevel.High || p.RiskLevel == RiskLevel.Critical);
+            var mediumRiskCount = dataPoints.Count(p => p.RiskLevel == RiskLevel.Medium);
+            var lowRiskCount = dataPoints.Count(p => p.RiskLevel == RiskLevel.Low);
+
+            sb.AppendLine();
+            sb.AppendLine("SUMMARY STATISTICS");
+            sb.AppendLine("-".PadRight(60, '-'));
+            sb.AppendLine($"  Average Peak Pressure Index: {avgPeakPressure:F2}");
+            sb.AppendLine($"  Minimum Peak Pressure Index: {minPeakPressure:F2}");
+            sb.AppendLine($"  Maximum Peak Pressure Index: {maxPeakPressure:F2}");
+            sb.AppendLine($"  Average Contact Area: {avgContactArea:F2}%");
+            sb.AppendLine();
+            sb.AppendLine("RISK LEVEL DISTRIBUTION");
+            sb.AppendLine("-".PadRight(60, '-'));
+            sb.AppendLine($"  Low Risk Events: {lowRiskCount}");
+            sb.AppendLine($"  Medium Risk Events: {mediumRiskCount}");
+            sb.AppendLine($"  High/Critical Risk Events: {highRiskCount}");
+            sb.AppendLine();
+            sb.AppendLine("RECENT DATA POINTS (Last 20)");
+            sb.AppendLine("-".PadRight(60, '-'));
+            sb.AppendLine("  Timestamp                | PPI    | Contact % | Risk Level");
+            sb.AppendLine("  ".PadRight(60, '-'));
+            
+            foreach (var point in dataPoints.OrderByDescending(p => p.Timestamp).Take(20))
+            {
+                var timestamp = point.Timestamp.ToString("yyyy-MM-dd HH:mm");
+                var ppi = point.PeakPressureIndex.ToString("F2").PadLeft(6);
+                var contact = point.ContactAreaPercent.ToString("F2").PadLeft(9);
+                var risk = point.RiskLevel.ToString().PadRight(10);
+                sb.AppendLine($"  {timestamp} | {ppi} | {contact}% | {risk}");
+            }
+            
+            if (dataPoints.Count > 20)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"  ... and {dataPoints.Count - 20} more data points");
+            }
+        }
+        else
+        {
+            sb.AppendLine();
+            sb.AppendLine("NO DATA AVAILABLE");
+            sb.AppendLine("-".PadRight(60, '-'));
+            sb.AppendLine("  No pressure data was found for the selected period.");
+            sb.AppendLine("  This could mean:");
+            sb.AppendLine("    - No data has been uploaded yet");
+            sb.AppendLine("    - Data exists outside the selected time range");
+            sb.AppendLine("    - Data collection has not started");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("=".PadRight(60, '='));
+        sb.AppendLine("End of Report");
+        sb.AppendLine("=".PadRight(60, '='));
+
+        return sb.ToString();
+    }
+
+    private static byte[] GenerateSimplePdf(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            content = "Empty Report\nNo content available.";
+        }
+
+        // Split content into lines, preserving empty lines for spacing
+        var lines = content.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+        
+        // Build content stream with proper PDF text positioning
+        var contentStream = new System.Text.StringBuilder();
+        contentStream.Append("BT\n");
+        contentStream.Append("/F1 12 Tf\n");
+        
+        int yPos = 750;
+        bool firstLine = true;
+        
+        foreach (var line in lines)
+        {
+            if (yPos < 50)
+            {
+                // Start new page if needed
+                contentStream.Append("ET\n");
+                contentStream.Append("BT\n");
+                contentStream.Append("/F1 12 Tf\n");
+                yPos = 750;
+            }
+            
+            var escapedLine = EscapePdfString(line);
+            
+            if (firstLine)
+            {
+                contentStream.Append($"72 {yPos} Td\n");
+                firstLine = false;
+            }
+            else
+            {
+                contentStream.Append($"0 -15 Td\n");
+            }
+            
+            contentStream.Append($"({escapedLine}) Tj\n");
+            yPos -= 15;
+        }
+        contentStream.Append("ET\n");
+        
+        var streamContent = contentStream.ToString();
+        var streamBytes = System.Text.Encoding.ASCII.GetBytes(streamContent);
+        
+        // Build PDF structure
+        var pdfParts = new List<(byte[] data, int length)>();
+        
+        // Header
+        var header = System.Text.Encoding.ASCII.GetBytes("%PDF-1.4\n");
+        pdfParts.Add((header, header.Length));
+        
+        // Object 1: Catalog
+        var catalog = System.Text.Encoding.ASCII.GetBytes("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        pdfParts.Add((catalog, catalog.Length));
+        
+        // Object 2: Pages
+        var pages = System.Text.Encoding.ASCII.GetBytes("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+        pdfParts.Add((pages, pages.Length));
+        
+        // Object 3: Page
+        var page = System.Text.Encoding.ASCII.GetBytes("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> >>\nendobj\n");
+        pdfParts.Add((page, page.Length));
+        
+        // Object 4: Content stream
+        var streamHeader = System.Text.Encoding.ASCII.GetBytes($"4 0 obj\n<< /Length {streamBytes.Length} >>\nstream\n");
+        pdfParts.Add((streamHeader, streamHeader.Length));
+        pdfParts.Add((streamBytes, streamBytes.Length));
+        var streamFooter = System.Text.Encoding.ASCII.GetBytes("\nendstream\nendobj\n");
+        pdfParts.Add((streamFooter, streamFooter.Length));
+        
+        // Calculate offsets for xref
+        int currentOffset = 0;
+        var offsets = new List<int>();
+        foreach (var (data, length) in pdfParts)
+        {
+            offsets.Add(currentOffset);
+            currentOffset += length;
+        }
+        
+        // XRef table
+        var xref = new System.Text.StringBuilder();
+        xref.Append("xref\n");
+        xref.Append($"0 {pdfParts.Count + 1}\n");
+        xref.Append("0000000000 65535 f \n");
+        
+        foreach (var offset in offsets)
+        {
+            xref.Append($"{offset:D10} 00000 n \n");
+        }
+        
+        var xrefBytes = System.Text.Encoding.ASCII.GetBytes(xref.ToString());
+        pdfParts.Add((xrefBytes, xrefBytes.Length));
+        
+        // Trailer
+        var trailerOffset = currentOffset;
+        var trailer = System.Text.Encoding.ASCII.GetBytes($"trailer\n<< /Size {pdfParts.Count} /Root 1 0 R >>\nstartxref\n{trailerOffset}\n%%EOF\n");
+        pdfParts.Add((trailer, trailer.Length));
+        
+        // Combine all parts
+        var totalLength = pdfParts.Sum(p => p.length);
+        var result = new byte[totalLength];
+        int position = 0;
+        foreach (var (data, length) in pdfParts)
+        {
+            Buffer.BlockCopy(data, 0, result, position, length);
+            position += length;
+        }
+        
+        return result;
+    }
+
+    private static string EscapePdfString(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        return text.Replace("\\", "\\\\")
+                   .Replace("(", "\\(")
+                   .Replace(")", "\\)")
+                   .Replace("\r", "");
     }
 }
 

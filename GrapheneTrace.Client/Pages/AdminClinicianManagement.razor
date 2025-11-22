@@ -211,7 +211,10 @@
                             dto.LastLoginAt ?? DateTime.MinValue,
                             "N/A", // Not applicable for clinicians
                             0,
-                            DateTime.MinValue
+                            DateTime.MinValue,
+                            dto.DateOfBirth,
+                            dto.PhoneNumber,
+                            dto.Address
                         )).ToList();
                 }
             }

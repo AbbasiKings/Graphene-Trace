@@ -9,5 +9,7 @@ public interface IAdminService
     Task<AdminUserDto?> UpdateUserAsync(Guid userId, UpdateUserDto data, CancellationToken cancellationToken = default);
     Task<bool> DeleteUserAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SystemAuditLogDto>> GetSystemAuditLogsAsync(int limit = 100, CancellationToken cancellationToken = default);
+    Task<SystemConfigurationDto> GetSystemConfigurationAsync(CancellationToken cancellationToken = default);
+    Task<bool> UpdateSystemConfigurationAsync(UpdateConfigurationDto config, CancellationToken cancellationToken = default);
 }
 

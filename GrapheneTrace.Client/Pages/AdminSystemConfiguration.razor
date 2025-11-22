@@ -1,11 +1,14 @@
 @page "/admin/configuration"
 @using GrapheneTrace.Client.Services
+@using GrapheneTrace.Client.Models
 @using GrapheneTrace.Core.DTOs.Admin
 @using System.Net.Http.Headers
 @using System.Net.Http.Json
+@using System.Text
 @inject HttpClient Http
 @inject AuthService AuthService
 @inject AppToastService ToastService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>System Configuration & Auditing</PageTitle>
 
@@ -17,9 +20,6 @@
                 Administer platform thresholds, review audit trails, and monitor service health.
             </MudText>
         </div>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
-            Export Audit Log
-        </MudButton>
     </MudStack>
 
     <MudTabs Rounded="true">
@@ -145,33 +145,14 @@
                 }
             </MudGrid>
         </MudTabPanel>
-
-        <MudTabPanel Text="Content Management" Icon="@Icons.Material.Filled.Article">
-            <MudGrid Class="mt-4">
-                @foreach (var template in ContentTemplates)
-                {
-                    <MudItem xs="12" md="6">
-                        <MudCard Class="elevation-1">
-                            <MudCardHeader>
-                                <MudText Typo="Typo.subtitle1" Class="fw-semibold">@template.Description</MudText>
-                            </MudCardHeader>
-                            <MudCardContent>
-                                <MudTextField @bind-Value="template.Subject" Label="Subject" Variant="Variant.Outlined" />
-                                <MudTextField @bind-Value="template.Body" Label="Body" Variant="Variant.Outlined" Lines="5" Class="mt-3" />
-                                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-3">
-                                    <MudButton Variant="Variant.Text" Color="Color.Secondary">Reset</MudButton>
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary">Save Draft</MudButton>
-                                </MudStack>
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-                }
-            </MudGrid>
-        </MudTabPanel>
     </MudTabs>
 </MudContainer>
 
 @code {
+    private const string ChannelEmail = "Email";
+    private const string ChannelSms = "SMS";
+    private const string ChannelPagerDuty = "PagerDuty";
+
     private List<ConfigurationSetting> ConfigurationSettings { get; } =
     [
         new("Peak Pressure Index Minimum", "Default minimum value used when calculating PPI across patient datasets.", 10.5, 5, 20, "px"),
@@ -292,12 +273,6 @@
         new("Audit Store", "Operational", DateTime.Now.AddMinutes(-25), "Write amplification within policy"),
     ];
 
-    private List<ContentTemplate> ContentTemplates { get; } =
-    [
-        new("AlertEmail", "Urgent Alert Email", "Action Required: Elevated Pressure Detected", "Hello {{ClinicianName}},\n\nThe system detected a sustained pressure reading above threshold for {{PatientName}} at {{Timestamp}}.\n\nRecommended next steps:\n• Review the latest frames in the clinician dashboard\n• Initiate outreach within 30 minutes if the readings persist\n\nRegards,\nGraphene Trace Platform"),
-        new("Onboarding", "Patient Onboarding Email", "Welcome to Graphene Trace", "Hello {{PatientName}},\n\nWelcome to the Graphene Trace platform. Your clinician {{ClinicianName}} has invited you to start monitoring pressure data using the Graphene sole sensors.\n\nTo get started:\n1. Download the Graphene Trace mobile app.\n2. Sign in using the email address you provided during enrollment.\n3. Follow the guided calibration steps.\n\nNeed help? Reply to this email or view our onboarding resources in the app.\n\nBest,\nThe Graphene Trace Team"),
-        new("SuspensionNotice", "Account Suspension Notice", "Notice: Account Suspension", "Hello {{UserName}},\n\nYour account has been temporarily suspended due to security policies. If this suspension was unexpected, please contact the system administrator at security@graphenetrace.com.\n\nRegards,\nSecurity Operations")
-    ];
 
     private Color StatusColor(string status) => status switch
     {
@@ -310,8 +285,4 @@
     private Color OutcomeColor(string outcome) => string.Equals(outcome, "Success", StringComparison.OrdinalIgnoreCase)
         ? Color.Success
         : Color.Error;
-
-    private const string ChannelEmail = "Email";
-    private const string ChannelSms = "SMS";
-    private const string ChannelPagerDuty = "PagerDuty";
 }

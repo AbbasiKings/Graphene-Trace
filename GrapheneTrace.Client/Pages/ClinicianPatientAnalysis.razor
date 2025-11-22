@@ -66,13 +66,11 @@ else if (_showPatientSelector)
                             <MudTd DataLabel="New Alerts">
                                 @if (context.NewAlertCount > 0)
                                 {
-                                    <MudBadge Content="@context.NewAlertCount" Color="Color.Error" Overlap="true">
-                                        <MudText Typo="Typo.body2">@context.NewAlertCount</MudText>
-                                    </MudBadge>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">@context.NewAlertCount</MudChip>
                                 }
                                 else
                                 {
-                                    <MudText Typo="Typo.body2">0</MudText>
+                                    <MudText Typo="Typo.body2" Class="text-secondary">—</MudText>
                                 }
                             </MudTd>
                             <MudTd DataLabel="Last Data">

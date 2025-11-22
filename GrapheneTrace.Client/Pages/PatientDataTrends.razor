@@ -1,5 +1,12 @@
 @page "/patient/trends"
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Client.Services
+@using MudBlazor
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject AuthService AuthService
+@inject AppToastService ToastService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Pressure Trends</PageTitle>
 
@@ -99,7 +106,15 @@
                                 <MudText Typo="Typo.subtitle1" Class="fw-semibold">@report.Title</MudText>
                                 <MudText Typo="Typo.caption" Class="text-secondary">Generated @report.GeneratedAt.ToString("MMM d · HH:mm")</MudText>
                                 <MudText Typo="Typo.body2">@report.Description</MudText>
-                                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                                <MudButton Variant="Variant.Text" 
+                                           Color="Color.Primary" 
+                                           StartIcon="@Icons.Material.Filled.Download"
+                                           OnClick="@(() => DownloadReport(report))"
+                                           Disabled="@_downloading">
+                                    @if (_downloading && _downloadingReport == report.Title)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
+                                    }
                                     @report.DownloadLabel
                                 </MudButton>
                             </MudStack>
@@ -176,6 +191,72 @@
         Last6Hours,
         Last24Hours,
         LastWeek
+    }
+
+    private bool _downloading = false;
+    private string? _downloadingReport;
+
+    private void EnsureAuthHeader()
+    {
+        if (AuthService?.Token != null && !Http.DefaultRequestHeaders.Contains("Authorization"))
+        {
+            Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AuthService.Token);
+        }
+    }
+
+    private async Task DownloadReport(PatientReportSummary report)
+    {
+        try
+        {
+            _downloading = true;
+            _downloadingReport = report.Title;
+            StateHasChanged();
+
+            EnsureAuthHeader();
+
+            // Determine report type based on title
+            string reportType = report.Title.ToLower() switch
+            {
+                var t when t.Contains("daily") => "daily",
+                var t when t.Contains("weekly") => "weekly",
+                var t when t.Contains("clinician") => "clinician-summary",
+                _ => "daily"
+            };
+
+            // Call API to generate/download report
+            var response = await Http.GetAsync($"api/patient/reports/{reportType}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsByteArrayAsync();
+                var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/pdf";
+                var fileName = response.Content.Headers.ContentDisposition?.FileName 
+                    ?? $"{report.Title.Replace(" ", "_")}_{DateTime.Now:yyyyMMdd}.pdf";
+
+                // Remove quotes from filename if present
+                fileName = fileName.Trim('"');
+
+                // Download file using JavaScript
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, contentType, Convert.ToBase64String(content));
+                
+                ToastService?.ShowSuccess($"Report '{report.Title}' downloaded successfully!");
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                ToastService?.ShowError($"Failed to download report: {errorText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Failed to download report: {ex.Message}");
+        }
+        finally
+        {
+            _downloading = false;
+            _downloadingReport = null;
+            StateHasChanged();
+        }
     }
 }
 

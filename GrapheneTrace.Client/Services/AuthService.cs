@@ -2,12 +2,15 @@
 using System.Net.Http.Json;
 using GrapheneTrace.Core.DTOs.Auth;
 using GrapheneTrace.Core.Enums;
+using Microsoft.JSInterop;
+using System.Text.Json;
 
 namespace GrapheneTrace.Client.Services;
 
 public class AuthService
 {
     private readonly HttpClient _httpClient;
+    private readonly IJSRuntime _jsRuntime;
 
     private bool _isAuthenticated;
     private UserRole? _role;
@@ -16,9 +19,12 @@ public class AuthService
     private string? _token;
     private Guid? _userId;
 
-    public AuthService(HttpClient httpClient)
+    private const string StorageKey = "graphene_trace_auth";
+
+    public AuthService(HttpClient httpClient, IJSRuntime jsRuntime)
     {
         _httpClient = httpClient;
+        _jsRuntime = jsRuntime;
     }
 
     public bool IsAuthenticated => _isAuthenticated;
@@ -43,7 +49,7 @@ public class AuthService
 
             if (response.IsSuccessStatusCode && payload.Status)
             {
-                SetAuthenticationState(requestDto.Email, payload.Role, payload.UserName, payload.Token, payload.UserId);
+                await SetAuthenticationStateAsync(requestDto.Email, payload.Role, payload.UserName, payload.Token, payload.UserId);
             }
             else
             {
@@ -65,7 +71,7 @@ public class AuthService
         }
     }
 
-    private void SetAuthenticationState(string email, UserRole role, string userName, string token, Guid userId)
+    private async Task SetAuthenticationStateAsync(string email, UserRole role, string userName, string token, Guid userId)
     {
         _isAuthenticated = true;
         _userEmail = email;
@@ -74,10 +80,80 @@ public class AuthService
         _token = token;
         _userId = userId;
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        
+        // Save to localStorage
+        await SaveAuthStateAsync(email, role, userName, token, userId);
+        
         AuthenticationStateChanged?.Invoke();
     }
 
-    public void Logout()
+    private async Task SaveAuthStateAsync(string email, UserRole role, string userName, string token, Guid userId)
+    {
+        try
+        {
+            var authData = new
+            {
+                Email = email,
+                Role = role.ToString(),
+                UserName = userName,
+                Token = token,
+                UserId = userId.ToString()
+            };
+            
+            var json = JsonSerializer.Serialize(authData);
+            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", StorageKey, json);
+        }
+        catch
+        {
+            // Ignore localStorage errors
+        }
+    }
+
+    public async Task LoadAuthStateAsync()
+    {
+        try
+        {
+            var json = await _jsRuntime.InvokeAsync<string>("localStorage.getItem", StorageKey);
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return;
+            }
+
+            var authData = JsonSerializer.Deserialize<AuthData>(json);
+            if (authData == null || string.IsNullOrWhiteSpace(authData.Token))
+            {
+                return;
+            }
+
+            // Restore authentication state
+            if (Enum.TryParse<UserRole>(authData.Role, out var role))
+            {
+                _isAuthenticated = true;
+                _userEmail = authData.Email;
+                _role = role;
+                _userName = authData.UserName;
+                _token = authData.Token;
+                _userId = Guid.TryParse(authData.UserId, out var userId) ? userId : null;
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authData.Token);
+                AuthenticationStateChanged?.Invoke();
+            }
+        }
+        catch
+        {
+            // Ignore errors - user will need to login again
+        }
+    }
+
+    private class AuthData
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+        public string UserName { get; set; } = string.Empty;
+        public string Token { get; set; } = string.Empty;
+        public string UserId { get; set; } = string.Empty;
+    }
+
+    public async Task LogoutAsync()
     {
         _isAuthenticated = false;
         _userEmail = null;
@@ -86,6 +162,17 @@ public class AuthService
         _token = null;
         _userId = null;
         _httpClient.DefaultRequestHeaders.Authorization = null;
+        
+        // Clear localStorage
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+        }
+        catch
+        {
+            // Ignore errors
+        }
+        
         AuthenticationStateChanged?.Invoke();
     }
 

@@ -54,6 +54,64 @@ public class ClinicianController(IClinicianService clinicianService) : Controlle
         return success ? Ok() : Forbid();
     }
 
+    [HttpGet("reports/{patientId:guid}")]
+    public async Task<IActionResult> DownloadReport(Guid patientId, [FromQuery] string? startDate, [FromQuery] string? endDate, CancellationToken cancellationToken)
+    {
+        var clinicianId = GetUserId();
+        
+        DateTime? start = null;
+        DateTime? end = null;
+        
+        if (!string.IsNullOrWhiteSpace(startDate) && DateTime.TryParse(startDate, out var parsedStart))
+        {
+            start = parsedStart;
+        }
+        
+        if (!string.IsNullOrWhiteSpace(endDate) && DateTime.TryParse(endDate, out var parsedEnd))
+        {
+            end = parsedEnd;
+        }
+
+        var reportBytes = await _clinicianService.GenerateReportAsync(patientId, clinicianId, start, end, cancellationToken);
+
+        if (reportBytes == null || reportBytes.Length == 0)
+        {
+            return NotFound("Report not found or could not be generated.");
+        }
+
+        var fileName = $"Patient_Report_{patientId.ToString("N")[..8]}_{DateTime.UtcNow:yyyyMMdd}.pdf";
+        return File(reportBytes, "application/pdf", fileName);
+    }
+
+    [HttpGet("reports/{patientId:guid}/csv")]
+    public async Task<IActionResult> DownloadReportCsv(Guid patientId, [FromQuery] string? startDate, [FromQuery] string? endDate, CancellationToken cancellationToken)
+    {
+        var clinicianId = GetUserId();
+        
+        DateTime? start = null;
+        DateTime? end = null;
+        
+        if (!string.IsNullOrWhiteSpace(startDate) && DateTime.TryParse(startDate, out var parsedStart))
+        {
+            start = parsedStart;
+        }
+        
+        if (!string.IsNullOrWhiteSpace(endDate) && DateTime.TryParse(endDate, out var parsedEnd))
+        {
+            end = parsedEnd;
+        }
+
+        var csvContent = await _clinicianService.GenerateReportCsvAsync(patientId, clinicianId, start, end, cancellationToken);
+
+        if (csvContent == null || csvContent.Length == 0)
+        {
+            return NotFound("Report not found or could not be generated.");
+        }
+
+        var fileName = $"Patient_Report_{patientId.ToString("N")[..8]}_{DateTime.UtcNow:yyyyMMdd}.csv";
+        return File(csvContent, "text/csv", fileName);
+    }
+
     private Guid GetUserId()
     {
         var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);

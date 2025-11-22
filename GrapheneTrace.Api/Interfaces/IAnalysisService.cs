@@ -11,5 +11,9 @@ public interface IAnalysisService
     Task<IReadOnlyList<PatientAlertDto>> GetAlertsAsync(Guid patientId, CancellationToken cancellationToken = default);
     Task<Comment> CreateQuickLogAsync(Guid patientId, Guid authorId, QuickLogDto request, CancellationToken cancellationToken = default);
     Task<FileUploadResultDto> ProcessUploadedFileAsync(Guid patientId, string fileName, Stream stream, CancellationToken cancellationToken = default);
+    Task<PatientProfileDto> GetProfileAsync(Guid patientId, CancellationToken cancellationToken = default);
+    Task<PatientProfileDto> UpdateProfileAsync(Guid patientId, UpdatePatientProfileDto updateDto, CancellationToken cancellationToken = default);
+    Task<bool> ChangePasswordAsync(Guid patientId, ChangePasswordDto changePasswordDto, CancellationToken cancellationToken = default);
+    Task<byte[]?> GenerateReportAsync(Guid patientId, string reportType, CancellationToken cancellationToken = default);
 }
 

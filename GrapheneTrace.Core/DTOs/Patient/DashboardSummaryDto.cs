@@ -11,6 +11,8 @@ public class DashboardSummaryDto
     public AlertSummaryDto AlertSummary { get; set; } = new();
     public ClinicianReplyDto? LatestClinicianReply { get; set; }
     public IReadOnlyList<PatientAlertDto> RecentAlerts { get; set; } = Array.Empty<PatientAlertDto>();
+    public string? AssignedClinicianName { get; set; }
+    public IReadOnlyList<PatientMessageDto> AllComments { get; set; } = Array.Empty<PatientMessageDto>();
 }
 
 public class AlertSummaryDto
@@ -25,5 +27,14 @@ public class ClinicianReplyDto
     public string AuthorName { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
+}
+
+public class PatientMessageDto
+{
+    public Guid MessageId { get; set; }
+    public string AuthorName { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
+    public bool IsClinician { get; set; }
 }
 

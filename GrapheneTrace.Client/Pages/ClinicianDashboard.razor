@@ -39,14 +39,14 @@ else
             {
                 <MudItem xs="12" md="6" lg="3">
                     <MudCard Class="elevation-2 h-100">
-                        <MudCardContent>
-                            <MudStack Spacing="1">
+                        <MudCardContent Class="pa-4">
+                            <MudStack Spacing="2" Style="min-height: 120px;">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                    <MudText Typo="Typo.subtitle2" Class="text-secondary">@card.Title</MudText>
-                                    <MudIcon Icon="@card.Icon" Color="@card.IconColor" />
+                                    <MudText Typo="Typo.subtitle2" Class="text-secondary" Style="flex: 1; overflow: hidden; text-overflow: ellipsis;">@card.Title</MudText>
+                                    <MudIcon Icon="@card.Icon" Color="@card.IconColor" Size="Size.Medium" Class="ms-2" />
                                 </MudStack>
-                                <MudText Typo="Typo.h4" Class="fw-semibold">@card.Value</MudText>
-                                <MudText Typo="Typo.caption" Color="@card.TrendColor">@card.Trend</MudText>
+                                <MudText Typo="Typo.h4" Class="fw-semibold" Style="line-height: 1.2;">@card.Value</MudText>
+                                <MudText Typo="Typo.caption" Color="@card.TrendColor" Style="line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">@card.Trend</MudText>
                             </MudStack>
                         </MudCardContent>
                     </MudCard>
@@ -87,14 +87,24 @@ else
                                         <MudChip T="string" Color="@GetRiskColor(context.HighestRisk)" Size="Size.Small">@context.HighestRisk</MudChip>
                                     </MudTd>
                                     <MudTd DataLabel="New Alerts">
-                                        <MudBadge Content="@context.NewAlertCount" Color="Color.Error" Overlap="true">
-                                            <MudText Typo="Typo.body2">@context.NewAlertCount</MudText>
-                                        </MudBadge>
+                                        @if (context.NewAlertCount > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">@context.NewAlertCount</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2" Class="text-secondary">—</MudText>
+                                        }
                                     </MudTd>
                                     <MudTd DataLabel="New Comments">
-                                        <MudBadge Content="@context.NewCommentCount" Color="Color.Info" Overlap="true">
-                                            <MudText Typo="Typo.body2">@context.NewCommentCount</MudText>
-                                        </MudBadge>
+                                        @if (context.NewCommentCount > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled">@context.NewCommentCount</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2" Class="text-secondary">—</MudText>
+                                        }
                                     </MudTd>
                                     <MudTd DataLabel="Last Data">
                                         <MudText Typo="Typo.caption" Class="text-secondary">

@@ -132,6 +132,9 @@ public class AdminService(AppDbContext dbContext, IAuditService auditService) : 
         user.Email = data.Email;
         user.Role = data.Role;
         user.IsActive = data.IsActive;
+        user.DateOfBirth = data.DateOfBirth;
+        user.PhoneNumber = data.PhoneNumber;
+        user.Address = data.Address;
         user.UpdatedAt = DateTime.UtcNow;
 
         // Handle password update (only if provided)
@@ -253,6 +256,184 @@ public class AdminService(AppDbContext dbContext, IAuditService auditService) : 
                 MetadataJson = log.MetadataJson
             };
         }).ToList();
+    }
+
+    public async Task<SystemConfigurationDto> GetSystemConfigurationAsync(CancellationToken cancellationToken = default)
+    {
+        // For now, return default configuration
+        // In production, this would load from database or configuration store
+        return new SystemConfigurationDto
+        {
+            Settings = new List<ConfigurationSettingDto>
+            {
+                new ConfigurationSettingDto
+                {
+                    Name = "Peak Pressure Index Minimum",
+                    Description = "Default minimum value used when calculating PPI across patient datasets.",
+                    Value = 10.5,
+                    Min = 5,
+                    Max = 20,
+                    Suffix = "px"
+                },
+                new ConfigurationSettingDto
+                {
+                    Name = "Contact Area Threshold",
+                    Description = "Lower threshold used when determining contact area percentage.",
+                    Value = 32,
+                    Min = 10,
+                    Max = 60,
+                    Suffix = "%"
+                },
+                new ConfigurationSettingDto
+                {
+                    Name = "Daily Alert Cap",
+                    Description = "Maximum alerts per patient before automatic escalation is triggered.",
+                    Value = 12,
+                    Min = 5,
+                    Max = 20,
+                    Suffix = "alerts"
+                }
+            },
+            AlertConfig = new AlertConfigurationDto
+            {
+                AlertingEnabled = true,
+                AlertSensitivity = 68,
+                EscalationWindow = "15 minutes",
+                NotificationChannel = "Email"
+            },
+            DatabaseStatuses = await GetDatabaseStatusesAsync(cancellationToken),
+            ContentTemplates = new List<ContentTemplateDto>
+            {
+                new ContentTemplateDto
+                {
+                    Id = "AlertEmail",
+                    Description = "Urgent Alert Email",
+                    Subject = "Action Required: Elevated Pressure Detected",
+                    Body = "Hello {{ClinicianName}},\n\nThe system detected a sustained pressure reading above threshold for {{PatientName}} at {{Timestamp}}.\n\nRecommended next steps:\n• Review the latest frames in the clinician dashboard\n• Initiate outreach within 30 minutes if the readings persist\n\nRegards,\nGraphene Trace Platform"
+                },
+                new ContentTemplateDto
+                {
+                    Id = "Onboarding",
+                    Description = "Patient Onboarding Email",
+                    Subject = "Welcome to Graphene Trace",
+                    Body = "Hello {{PatientName}},\n\nWelcome to the Graphene Trace platform. Your clinician {{ClinicianName}} has invited you to start monitoring pressure data using the Graphene sole sensors.\n\nTo get started:\n1. Download the Graphene Trace mobile app.\n2. Sign in using the email address you provided during enrollment.\n3. Follow the guided calibration steps.\n\nNeed help? Reply to this email or view our onboarding resources in the app.\n\nBest,\nThe Graphene Trace Team"
+                },
+                new ContentTemplateDto
+                {
+                    Id = "SuspensionNotice",
+                    Description = "Account Suspension Notice",
+                    Subject = "Notice: Account Suspension",
+                    Body = "Hello {{UserName}},\n\nYour account has been temporarily suspended due to security policies. If this suspension was unexpected, please contact the system administrator at security@graphenetrace.com.\n\nRegards,\nSecurity Operations"
+                }
+            }
+        };
+    }
+
+    public async Task<bool> UpdateSystemConfigurationAsync(UpdateConfigurationDto config, CancellationToken cancellationToken = default)
+    {
+        // For now, just return true (configuration would be saved to database in production)
+        // In production, you would save to a Configuration table or appsettings
+        await Task.CompletedTask;
+        return true;
+    }
+
+    private async Task<List<DatabaseStatusDto>> GetDatabaseStatusesAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var statuses = new List<DatabaseStatusDto>();
+        
+        try
+        {
+            // Check database connectivity
+            var canConnect = await _dbContext.Database.CanConnectAsync(cancellationToken);
+            
+            int totalUsers = 0;
+            int totalDataPoints = 0;
+            
+            if (canConnect)
+            {
+                try
+                {
+                    totalUsers = await _dbContext.Users.CountAsync(cancellationToken);
+                }
+                catch
+                {
+                    // Ignore count errors
+                }
+                
+                try
+                {
+                    totalDataPoints = await _dbContext.PatientData.CountAsync(cancellationToken);
+                }
+                catch
+                {
+                    // Ignore count errors
+                }
+            }
+
+            statuses.Add(new DatabaseStatusDto
+            {
+                System = "Primary Database",
+                Status = canConnect ? "Operational" : "Degraded",
+                LastUpdated = now,
+                Description = canConnect 
+                    ? $"Connected - {totalUsers} users, {totalDataPoints} data points"
+                    : "Connection issues detected"
+            });
+        }
+        catch (Exception ex)
+        {
+            statuses.Add(new DatabaseStatusDto
+            {
+                System = "Primary Database",
+                Status = "Degraded",
+                LastUpdated = now,
+                Description = $"Error: {ex.Message}"
+            });
+        }
+
+        // Add other statuses (these are mock statuses)
+        statuses.Add(new DatabaseStatusDto
+        {
+            System = "Analytics Warehouse",
+            Status = "Operational",
+            LastUpdated = now.AddMinutes(-12),
+            Description = "ETL sync completed"
+        });
+        
+        statuses.Add(new DatabaseStatusDto
+        {
+            System = "Disaster Recovery",
+            Status = "Standby",
+            LastUpdated = now.AddHours(-1),
+            Description = "Ready for failover - last replication 59 minutes ago"
+        });
+        
+        statuses.Add(new DatabaseStatusDto
+        {
+            System = "Realtime Queue",
+            Status = "Operational",
+            LastUpdated = now.AddMinutes(-2),
+            Description = "Normal operation"
+        });
+        
+        statuses.Add(new DatabaseStatusDto
+        {
+            System = "Archive Storage",
+            Status = "Operational",
+            LastUpdated = now.AddMinutes(-19),
+            Description = "New partitions allocated for current datasets"
+        });
+        
+        statuses.Add(new DatabaseStatusDto
+        {
+            System = "Audit Store",
+            Status = "Operational",
+            LastUpdated = now.AddMinutes(-25),
+            Description = "Write amplification within policy"
+        });
+
+        return statuses;
     }
 }
 

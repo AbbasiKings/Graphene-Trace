@@ -88,25 +88,21 @@ else
                         <MudTd DataLabel="New Alerts" Class="text-end">
                             @if (context.NewAlertCount > 0)
                             {
-                                <MudBadge Content="@context.NewAlertCount" Color="Color.Error" Overlap="true">
-                                    <MudText Typo="Typo.body2">@context.NewAlertCount</MudText>
-                                </MudBadge>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">@context.NewAlertCount</MudChip>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body2">0</MudText>
+                                <MudText Typo="Typo.body2" Class="text-secondary">—</MudText>
                             }
                         </MudTd>
                         <MudTd DataLabel="New Comments" Class="text-end">
                             @if (context.NewCommentCount > 0)
                             {
-                                <MudBadge Content="@context.NewCommentCount" Color="Color.Info" Overlap="true">
-                                    <MudText Typo="Typo.body2">@context.NewCommentCount</MudText>
-                                </MudBadge>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled">@context.NewCommentCount</MudChip>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body2">0</MudText>
+                                <MudText Typo="Typo.body2" Class="text-secondary">—</MudText>
                             }
                         </MudTd>
                         <MudTd DataLabel="Last Data">

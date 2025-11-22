@@ -74,9 +74,9 @@
                 </TemplateColumn>
                 <TemplateColumn Title="Status">
                     <CellTemplate>
-                        <MudBadge Color="@StatusBadgeColor(context.Item.Status)">
+                        <MudChip T="string" Color="@StatusBadgeColor(context.Item.Status)" Size="Size.Small" Variant="Variant.Filled">
                             @context.Item.Status
-                        </MudBadge>
+                        </MudChip>
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn T="AdminUser" TProperty="DateTime" Property="@(u => u.LastLogin)" Title="Last Login" Format="yyyy-MM-dd HH:mm" />
@@ -232,7 +232,10 @@
                             dto.LastLoginAt ?? DateTime.MinValue,
                             dto.AssignedClinicianName ?? NotAssignedLabel,
                             0, // TotalFrames - would need separate API call
-                            DateTime.MinValue // LastDataReceived - would need separate API call
+                            DateTime.MinValue, // LastDataReceived - would need separate API call
+                            dto.DateOfBirth,
+                            dto.PhoneNumber,
+                            dto.Address
                         )).ToList();
 
                     // Store clinicians for assignment dropdown
@@ -316,7 +319,10 @@
             Email = user.Email,
             Role = user.Role,
             Status = user.Status,
-            AssignedClinician = user.AssignedClinician == NotAssignedLabel ? string.Empty : user.AssignedClinician
+            AssignedClinician = user.AssignedClinician == NotAssignedLabel ? string.Empty : user.AssignedClinician,
+            DateOfBirth = user.DateOfBirth,
+            PhoneNumber = user.PhoneNumber,
+            Address = user.Address
         };
 
         await ShowUserDialog("Edit User", model, isEdit: true);
@@ -471,7 +477,10 @@
                 Role = UserRole.Patient, // Always keep as Patient
                 IsActive = formResult.Status == StatusActive,
                 AssignedClinicianId = GetClinicianIdFromName(formResult.AssignedClinician),
-                Password = string.IsNullOrWhiteSpace(formResult.Password) ? null : formResult.Password
+                Password = string.IsNullOrWhiteSpace(formResult.Password) ? null : formResult.Password,
+                DateOfBirth = formResult.DateOfBirth,
+                PhoneNumber = formResult.PhoneNumber,
+                Address = formResult.Address
             };
 
             var response = await Http.PutAsJsonAsync($"api/admin/users/{userId}", updateUserDto);

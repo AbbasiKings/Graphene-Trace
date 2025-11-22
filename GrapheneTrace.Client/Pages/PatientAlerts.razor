@@ -2,10 +2,14 @@
 @using GrapheneTrace.Client.Models
 @using GrapheneTrace.Client.Services
 @using GrapheneTrace.Core.DTOs.Patient
+@using GrapheneTrace.Core.Enums
+@using MudBlazor
+@using Microsoft.AspNetCore.Components
 @using System.Net.Http.Headers
 @inject HttpClient Http
 @inject AppToastService ToastService
 @inject AuthService AuthService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Alerts & Communication</PageTitle>
 
@@ -18,7 +22,7 @@
             </MudText>
         </div>
         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text">
-            New alerts: @(AlertHistory.Count(a => a.Status == "New"))
+            New alerts: @(_dashboardData?.AlertSummary?.NewAlerts ?? 0)
         </MudChip>
     </MudStack>
 
@@ -32,22 +36,35 @@
                     </MudText>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudTable T="PatientAlertDigest" Items="AlertHistory" Dense="true">
-                        <HeaderContent>
-                            <MudTh>Time</MudTh>
-                            <MudTh>Title</MudTh>
-                            <MudTh>Region</MudTh>
-                            <MudTh>Status</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Time">@context.Timestamp.ToString("MMM d · HH:mm")</MudTd>
-                            <MudTd DataLabel="Title">@context.Title</MudTd>
-                            <MudTd DataLabel="Region">@context.Region</MudTd>
-                            <MudTd DataLabel="Status">
-                                <MudChip T="string" Color="@context.StatusColor" Size="Size.Small">@context.Status</MudChip>
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
+                    @if (_loading)
+                    {
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+                    }
+                    else if (_dashboardData?.RecentAlerts == null || _dashboardData.RecentAlerts.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="text-secondary">No alerts found.</MudText>
+                    }
+                    else
+                    {
+                        <MudTable T="PatientAlertDto" Items="@_dashboardData.RecentAlerts" Dense="true">
+                            <HeaderContent>
+                                <MudTh>Time</MudTh>
+                                <MudTh>Reason</MudTh>
+                                <MudTh>Risk Level</MudTh>
+                                <MudTh>Status</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Time">@context.Timestamp.ToLocalTime().ToString("MMM d · HH:mm")</MudTd>
+                                <MudTd DataLabel="Reason">@context.Reason</MudTd>
+                                <MudTd DataLabel="Risk Level">
+                                    <MudChip T="string" Color="@GetRiskColor(context.RiskLevel)" Size="Size.Small">@context.RiskLevel</MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Status">
+                                    <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">@context.Status</MudChip>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
                 </MudCardContent>
             </MudCard>
         </MudItem>
@@ -94,63 +111,193 @@
         </MudItem>
     </MudGrid>
 
-    <MudCard Class="elevation-1 mt-4">
-        <MudCardHeader>
-            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                <MudText Typo="Typo.h6">Conversation with @Thread.ClinicianName</MudText>
-                <MudChip T="string" Color="Color.Success">Response time: under 6h</MudChip>
-            </MudStack>
-        </MudCardHeader>
-        <MudCardContent>
-            <div class="conversation-body">
-                @foreach (var message in Thread.Messages)
+    @if (!string.IsNullOrEmpty(_dashboardData?.AssignedClinicianName))
+    {
+        <MudCard Class="elevation-1 mt-4 conversation-card">
+            <MudCardHeader>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.h6" Class="fw-bold">Conversation with @(_dashboardData.AssignedClinicianName)</MudText>
+                        <MudText Typo="Typo.caption" Class="text-secondary">Lead Clinician</MudText>
+                    </MudStack>
+                    @if (_dashboardData?.LatestClinicianReply != null)
+                    {
+                        var hoursSinceReply = (DateTime.UtcNow - _dashboardData.LatestClinicianReply.Timestamp).TotalHours;
+                        <MudChip T="string" 
+                                 Color="@(hoursSinceReply < 6 ? Color.Success : hoursSinceReply < 24 ? Color.Warning : Color.Error)"
+                                 Size="Size.Small"
+                                 Icon="@(hoursSinceReply < 6 ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Schedule)">
+                            @if (hoursSinceReply < 6)
+                            {
+                                <text>Active · Responded recently</text>
+                            }
+                            else if (hoursSinceReply < 24)
+                            {
+                                <text>Pending · @Math.Round(hoursSinceReply)h ago</text>
+                            }
+                            else
+                            {
+                                <text>Overdue · @Math.Round(hoursSinceReply / 24) days ago</text>
+                            }
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Icon="@Icons.Material.Filled.ChatBubbleOutline">No messages yet</MudChip>
+                    }
+                </MudStack>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_loading)
                 {
-                    <div class="message @(message.IsClinician ? "from-clinician" : "from-patient")">
-                        <MudPaper Class="message-bubble" Elevation="1">
-                            <MudStack Spacing="1">
-                                <MudText Typo="Typo.caption" Class="text-secondary">
-                                    @(message.IsClinician ? "Clinician" : "You") · @message.Timestamp.ToString("MMM d · HH:mm")
-                                </MudText>
-                                <MudText Typo="Typo.body2">@message.Body</MudText>
-                            </MudStack>
-                        </MudPaper>
+                    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2" Style="min-height: 200px; padding: 40px;">
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" />
+                        <MudText Typo="Typo.body2" Class="text-secondary">Loading conversation...</MudText>
+                    </MudStack>
+                }
+                else if (_dashboardData?.AllComments == null || _dashboardData.AllComments.Count == 0)
+                {
+                    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Style="min-height: 200px; padding: 40px;">
+                        <MudIcon Icon="@Icons.Material.Filled.ChatBubbleOutline" Size="Size.Large" Color="Color.Secondary" Style="opacity: 0.5;" />
+                        <MudText Typo="Typo.h6" Class="text-secondary">No messages yet</MudText>
+                        <MudText Typo="Typo.body2" Class="text-secondary" Style="text-align: center; max-width: 400px;">
+                            Start the conversation by submitting a comment above. Your clinician will respond here.
+                        </MudText>
+                    </MudStack>
+                }
+                else
+                {
+                    <div class="conversation-body" @ref="_conversationBody">
+                        @foreach (var message in _dashboardData.AllComments)
+                        {
+                            <div class="message @(message.IsClinician ? "from-clinician" : "from-patient")">
+                                <MudPaper Class="message-bubble" Elevation="0" Style="@GetBubbleStyle(message.IsClinician)">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body2" 
+                                                 Style="@GetMessageStyle(message.IsClinician)">
+                                            @CleanMessageText(message.Message)
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" 
+                                                 Class="@GetTimeClass(message.IsClinician)"
+                                                 Style="margin-top: 4px; opacity: 0.7;">
+                                            @GetFormattedTime(message.Timestamp, message.IsClinician)
+                                        </MudText>
+                                    </MudStack>
+                                </MudPaper>
+                            </div>
+                        }
+                        @if (_submittingComment)
+                        {
+                            <div class="message from-patient message-pending">
+                                <MudPaper Class="message-bubble" Elevation="0" Style="@GetBubbleStyle(false)">
+                                    <MudStack Spacing="1">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Size="Size.Small" Style="width: 80px;" />
+                                            <MudText Typo="Typo.body2" Style="opacity: 0.7;">@_commentBody</MudText>
+                                        </MudStack>
+                                    </MudStack>
+                                </MudPaper>
+                            </div>
+                        }
+                        <div @ref="_scrollAnchor"></div>
                     </div>
                 }
-            </div>
-        </MudCardContent>
-    </MudCard>
+            </MudCardContent>
+        </MudCard>
+    }
+    else
+    {
+        <MudCard Class="elevation-1 mt-4">
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Class="text-secondary">No clinician assigned yet. Please contact your administrator.</MudText>
+            </MudCardContent>
+        </MudCard>
+    }
 </MudContainer>
 
 @code {
-    private readonly IReadOnlyList<PatientAlertDigest> AlertHistory = new[]
-    {
-        new PatientAlertDigest(Guid.NewGuid(), DateTime.Now.AddMinutes(-18), "High pressure during walk", "Right heel", "New", Color.Error),
-        new PatientAlertDigest(Guid.NewGuid(), DateTime.Now.AddHours(-3), "Sustained load detected", "Midfoot", "Acknowledged", Color.Warning),
-        new PatientAlertDigest(Guid.NewGuid(), DateTime.Now.AddHours(-8), "Improved distribution", "Full foot", "Resolved", Color.Success),
-        new PatientAlertDigest(Guid.NewGuid(), DateTime.Now.AddDays(-1), "Evening discomfort note", "Toe area", "Resolved", Color.Success)
-    };
-
-    private readonly PatientMessageThread Thread = new(
-        Guid.NewGuid(),
-        "Dr. Harper Diaz",
-        new List<PatientMessage>
-        {
-            new PatientMessage(Guid.NewGuid(), "Patient", DateTime.Now.AddHours(-12), "Felt a sharp spot on heel during walk.", false),
-            new PatientMessage(Guid.NewGuid(), "Clinician", DateTime.Now.AddHours(-11.5), "Thanks for logging it. Monitor tonight and use offloading insert.", true),
-            new PatientMessage(Guid.NewGuid(), "Patient", DateTime.Now.AddHours(-2), "Used the insert. Pressure felt lower but heel still warm.", false),
-            new PatientMessage(Guid.NewGuid(), "Clinician", DateTime.Now.AddHours(-1.5), "Great. I'll review today's data and follow up tomorrow morning.", true)
-        });
-
+    private bool _loading = true;
+    private string? _loadError;
+    private DashboardSummaryDto? _dashboardData;
     private string _commentTimestamp = DateTime.Now.ToString("HH:mm");
     private string _commentRegion = string.Empty;
     private string _commentBody = string.Empty;
     private bool _submittingComment = false;
+    private ElementReference _conversationBody;
+    private ElementReference _scrollAnchor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardDataAsync();
+    }
 
     private void EnsureAuthHeader()
     {
         if (!string.IsNullOrEmpty(AuthService.Token))
         {
             Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AuthService.Token);
+        }
+    }
+
+    private async Task LoadDashboardDataAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        StateHasChanged();
+
+        try
+        {
+            EnsureAuthHeader();
+            var response = await Http.GetAsync("api/patient/dashboard");
+            if (response.IsSuccessStatusCode)
+            {
+                _dashboardData = await response.Content.ReadFromJsonAsync<DashboardSummaryDto>();
+            }
+            else
+            {
+                _loadError = $"Failed to load dashboard data: {response.StatusCode}";
+                ToastService?.ShowError(_loadError);
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _loadError = $"Cannot connect to API server. Please ensure the backend is running. Error: {httpEx.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Error loading dashboard: {ex.Message}";
+            ToastService?.ShowError(_loadError);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+            await ScrollToBottomAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender || !_loading)
+        {
+            await ScrollToBottomAsync();
+        }
+    }
+
+    private async Task ScrollToBottomAsync()
+    {
+        try
+        {
+            await Task.Delay(100); // Small delay to ensure DOM is updated
+            if (_scrollAnchor.Context != null)
+            {
+                await JSRuntime.InvokeVoidAsync("scrollToElement", _scrollAnchor);
+            }
+        }
+        catch
+        {
+            // Ignore scroll errors
         }
     }
 
@@ -168,21 +315,8 @@
 
             EnsureAuthHeader();
 
-            // Build comment text with optional metadata
+            // Use comment text directly without metadata
             var commentText = _commentBody.Trim();
-            if (!string.IsNullOrWhiteSpace(_commentTimestamp) || !string.IsNullOrWhiteSpace(_commentRegion))
-            {
-                var metadata = new List<string>();
-                if (!string.IsNullOrWhiteSpace(_commentTimestamp))
-                {
-                    metadata.Add($"Time: {_commentTimestamp}");
-                }
-                if (!string.IsNullOrWhiteSpace(_commentRegion))
-                {
-                    metadata.Add($"Region: {_commentRegion}");
-                }
-                commentText = $"{commentText}\n\n[{string.Join(" | ", metadata)}]";
-            }
 
             var request = new QuickLogDto { CommentText = commentText };
             var response = await Http.PostAsJsonAsync("api/patient/quicklog", request);
@@ -196,7 +330,9 @@
                 _commentTimestamp = DateTime.Now.ToString("HH:mm");
                 _commentRegion = string.Empty;
                 
-                // Optionally reload page data here if needed
+                // Reload dashboard data to show new comment
+                await LoadDashboardDataAsync();
+                await ScrollToBottomAsync();
             }
             else
             {
@@ -213,6 +349,89 @@
             _submittingComment = false;
             StateHasChanged();
         }
+    }
+
+    private static Color GetRiskColor(RiskLevel risk) => risk switch
+    {
+        RiskLevel.Critical => Color.Error,
+        RiskLevel.High => Color.Warning,
+        RiskLevel.Medium => Color.Info,
+        _ => Color.Success
+    };
+
+    private static Color GetStatusColor(AlertStatus status) => status switch
+    {
+        AlertStatus.New => Color.Error,
+        AlertStatus.InReview => Color.Warning,
+        AlertStatus.Resolved => Color.Success,
+        _ => Color.Default
+    };
+
+    private static string GetMessageStyle(bool isClinician)
+    {
+        var baseStyle = "white-space: pre-wrap; word-wrap: break-word; line-height: 1.4; font-size: 14.2px;";
+        return baseStyle;
+    }
+
+    private static string GetChipStyle(bool isClinician)
+    {
+        return isClinician ? "color: rgba(255,255,255,0.9);" : "";
+    }
+
+    private static string GetTimeClass(bool isClinician)
+    {
+        return isClinician ? "message-time time-right" : "message-time time-left";
+    }
+
+    private static string GetBubbleStyle(bool isClinician)
+    {
+        var backgroundColor = isClinician ? "#a5d6a7" : "#bbdefb";
+        return $"background-color: {backgroundColor} !important; background: {backgroundColor} !important;";
+    }
+
+    private static string GetFormattedTime(DateTime timestamp, bool isClinician)
+    {
+        var localTime = timestamp.ToLocalTime();
+        var now = DateTime.Now;
+        var today = now.Date;
+        var messageDate = localTime.Date;
+
+        // If message is from today, show only time
+        if (messageDate == today)
+        {
+            return localTime.ToString("HH:mm");
+        }
+        // If message is from yesterday
+        else if (messageDate == today.AddDays(-1))
+        {
+            return $"Yesterday, {localTime.ToString("HH:mm")}";
+        }
+        // If message is from this week
+        else if (messageDate >= today.AddDays(-7))
+        {
+            return $"{localTime.ToString("ddd, HH:mm")}";
+        }
+        // Older messages - show full date and time
+        else
+        {
+            return localTime.ToString("MMM d, yyyy HH:mm");
+        }
+    }
+
+    private static string CleanMessageText(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return message;
+
+        // Remove metadata patterns like [Time: 14:24 | Region: Heel]
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(
+            message, 
+            @"\n\n\[.*?\]", 
+            "", 
+            System.Text.RegularExpressions.RegexOptions.Singleline
+        );
+        
+        return cleaned.Trim();
     }
 }
 

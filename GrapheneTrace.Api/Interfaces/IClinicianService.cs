@@ -10,5 +10,7 @@ public interface IClinicianService
     Task<RawPatientDataDto?> GetRawDataAsync(Guid dataId, CancellationToken cancellationToken = default);
     Task<bool> UpdateAlertStatusAsync(Guid alertId, AlertStatusUpdateDto request, Guid clinicianId, CancellationToken cancellationToken = default);
     Task<bool> ReplyToPatientAsync(Guid patientId, Guid clinicianId, QuickLogDto request, CancellationToken cancellationToken = default);
+    Task<byte[]?> GenerateReportAsync(Guid patientId, Guid clinicianId, DateTime? startDate, DateTime? endDate, CancellationToken cancellationToken = default);
+    Task<byte[]?> GenerateReportCsvAsync(Guid patientId, Guid clinicianId, DateTime? startDate, DateTime? endDate, CancellationToken cancellationToken = default);
 }
 

@@ -145,7 +145,10 @@ public class AuthService(AppDbContext dbContext, ILogger<AuthService> logger, IC
             IsActive = u.IsActive,
             LastLoginAt = u.LastLoginAt,
             AssignedClinicianId = u.AssignedClinicianId,
-            AssignedClinicianName = u.AssignedClinician?.FullName
+            AssignedClinicianName = u.AssignedClinician?.FullName,
+            DateOfBirth = u.DateOfBirth,
+            PhoneNumber = u.PhoneNumber,
+            Address = u.Address
         }).ToList();
     }
 

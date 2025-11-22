@@ -10,6 +10,11 @@ public class UpdateUserDto
     public bool IsActive { get; set; } = true;
     public Guid? AssignedClinicianId { get; set; }
     public string? Password { get; set; } // Optional - only update if provided
+    public DateTime? DateOfBirth { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Address { get; set; }
 }
+
+
 
 

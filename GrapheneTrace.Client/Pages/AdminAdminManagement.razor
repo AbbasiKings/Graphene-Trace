@@ -202,7 +202,10 @@
                             dto.LastLoginAt ?? DateTime.MinValue,
                             "N/A",
                             0,
-                            DateTime.MinValue
+                            DateTime.MinValue,
+                            dto.DateOfBirth,
+                            dto.PhoneNumber,
+                            dto.Address
                         )).ToList();
                 }
             }

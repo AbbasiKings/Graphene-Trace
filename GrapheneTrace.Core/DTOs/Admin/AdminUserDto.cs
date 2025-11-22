@@ -12,5 +12,8 @@ public class AdminUserDto
     public DateTime? LastLoginAt { get; set; }
     public Guid? AssignedClinicianId { get; set; }
     public string? AssignedClinicianName { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Address { get; set; }
 }
 

@@ -1,11 +1,15 @@
 @page "/clinician/reports"
 @using GrapheneTrace.Client.Models
+@using GrapheneTrace.Client.Services
 @using GrapheneTrace.Core.DTOs.Clinician
 @using GrapheneTrace.Core.DTOs.Patient
 @using GrapheneTrace.Core.Enums
 @using MudBlazor
+@using System.Net.Http.Headers
 @inject HttpClient Http
 @inject AppToastService ToastService
+@inject AuthService AuthService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Reporting &amp; Exports</PageTitle>
 
@@ -61,15 +65,23 @@ else
                 <MudButton Variant="Variant.Outlined" 
                            Color="Color.Secondary" 
                            StartIcon="@Icons.Material.Filled.GridOn"
-                           Disabled="@(_reportData == null)"
+                           Disabled="@(_reportData == null || _downloadingCsv)"
                            OnClick="ExportCsv">
+                    @if (_downloadingCsv)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
+                    }
                     Export CSV
                 </MudButton>
                 <MudButton Variant="Variant.Filled" 
                            Color="Color.Primary" 
                            StartIcon="@Icons.Material.Filled.PictureAsPdf"
-                           Disabled="@(_reportData == null)"
+                           Disabled="@(_reportData == null || _downloadingPdf)"
                            OnClick="ExportPdf">
+                    @if (_downloadingPdf)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
+                    }
                     Download PDF
                 </MudButton>
             </MudStack>
@@ -325,14 +337,124 @@ else
     private string GetRiskLabel(double ppi) => ppi >= 75 ? "Critical" : ppi >= 60 ? "High" : "Moderate";
     private Color GetRiskColorFromPpi(double ppi) => ppi >= 75 ? Color.Error : ppi >= 60 ? Color.Warning : Color.Info;
 
-    private void ExportCsv()
+    private bool _downloadingCsv = false;
+
+    private async Task ExportCsv()
     {
-        ToastService?.ShowInfo("CSV export functionality will be implemented.");
+        if (!_selectedPatientId.HasValue || _reportData == null)
+        {
+            ToastService?.ShowError("Please generate a report first.");
+            return;
+        }
+
+        try
+        {
+            _downloadingCsv = true;
+            StateHasChanged();
+
+            EnsureAuthHeader();
+
+            // Build query parameters for date range
+            var startDate = _primaryStart?.ToString("yyyy-MM-dd") ?? DateTime.Today.AddDays(-7).ToString("yyyy-MM-dd");
+            var endDate = _primaryEnd?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
+            
+            var url = $"api/clinician/reports/{_selectedPatientId.Value}/csv?startDate={startDate}&endDate={endDate}";
+            var response = await Http.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsByteArrayAsync();
+                var contentType = response.Content.Headers.ContentType?.MediaType ?? "text/csv";
+                var fileName = response.Content.Headers.ContentDisposition?.FileName 
+                    ?? $"Patient_Report_{_selectedPatientId.Value.ToString("N")[..8]}_{DateTime.Now:yyyyMMdd}.csv";
+
+                // Remove quotes from filename if present
+                fileName = fileName.Trim('"');
+
+                // Download file using JavaScript
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, contentType, Convert.ToBase64String(content));
+                
+                ToastService?.ShowSuccess("CSV report downloaded successfully!");
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                ToastService?.ShowError($"Failed to download CSV: {errorText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Failed to download CSV: {ex.Message}");
+        }
+        finally
+        {
+            _downloadingCsv = false;
+            StateHasChanged();
+        }
     }
 
-    private void ExportPdf()
+    private bool _downloadingPdf = false;
+
+    private async Task ExportPdf()
     {
-        ToastService?.ShowInfo("PDF export functionality will be implemented.");
+        if (!_selectedPatientId.HasValue || _reportData == null)
+        {
+            ToastService?.ShowError("Please generate a report first.");
+            return;
+        }
+
+        try
+        {
+            _downloadingPdf = true;
+            StateHasChanged();
+
+            EnsureAuthHeader();
+
+            // Build query parameters for date range
+            var startDate = _primaryStart?.ToString("yyyy-MM-dd") ?? DateTime.Today.AddDays(-7).ToString("yyyy-MM-dd");
+            var endDate = _primaryEnd?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd");
+            
+            var url = $"api/clinician/reports/{_selectedPatientId.Value}?startDate={startDate}&endDate={endDate}";
+            var response = await Http.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsByteArrayAsync();
+                var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/pdf";
+                var fileName = response.Content.Headers.ContentDisposition?.FileName 
+                    ?? $"Patient_Report_{_selectedPatientId.Value.ToString("N")[..8]}_{DateTime.Now:yyyyMMdd}.pdf";
+
+                // Remove quotes from filename if present
+                fileName = fileName.Trim('"');
+
+                // Download file using JavaScript
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, contentType, Convert.ToBase64String(content));
+                
+                ToastService?.ShowSuccess("Report downloaded successfully!");
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                ToastService?.ShowError($"Failed to download report: {errorText}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService?.ShowError($"Failed to download report: {ex.Message}");
+        }
+        finally
+        {
+            _downloadingPdf = false;
+            StateHasChanged();
+        }
+    }
+
+    private void EnsureAuthHeader()
+    {
+        if (AuthService?.Token != null && !Http.DefaultRequestHeaders.Contains("Authorization"))
+        {
+            Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AuthService.Token);
+        }
     }
 
     private class ReportMetricDto

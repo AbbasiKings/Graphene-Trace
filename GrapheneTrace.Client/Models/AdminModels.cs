@@ -17,7 +17,10 @@ namespace GrapheneTrace.Client.Models
         DateTime LastLogin,
         string AssignedClinician,
         int TotalFrames,
-        DateTime LastDataReceived);
+        DateTime LastDataReceived,
+        DateTime? DateOfBirth,
+        string? PhoneNumber,
+        string? Address);
 
     public class AdminUserFormModel
     {
@@ -34,6 +37,12 @@ namespace GrapheneTrace.Client.Models
         public string AssignedClinician { get; set; } = string.Empty;
 
         public string Password { get; set; } = string.Empty;
+
+        public DateTime? DateOfBirth { get; set; }
+
+        public string? PhoneNumber { get; set; }
+
+        public string? Address { get; set; }
 
         public bool IsNew => string.IsNullOrWhiteSpace(Id);
     }

@@ -94,6 +94,61 @@ public class PatientController(IAnalysisService analysisService) : ControllerBas
         return Ok(new { entry.Id, entry.Text, entry.CreatedAt });
     }
 
+    [HttpGet("profile")]
+    public async Task<ActionResult<PatientProfileDto>> GetProfile(CancellationToken cancellationToken)
+    {
+        var patientId = GetUserId();
+        var profile = await _analysisService.GetProfileAsync(patientId, cancellationToken);
+        return Ok(profile);
+    }
+
+    [HttpPut("profile")]
+    public async Task<ActionResult<PatientProfileDto>> UpdateProfile(UpdatePatientProfileDto request, CancellationToken cancellationToken)
+    {
+        var patientId = GetUserId();
+        var updatedProfile = await _analysisService.UpdateProfileAsync(patientId, request, cancellationToken);
+        return Ok(updatedProfile);
+    }
+
+    [HttpPut("change-password")]
+    public async Task<IActionResult> ChangePassword(ChangePasswordDto request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            return BadRequest("Current password and new password are required.");
+        }
+
+        if (request.NewPassword.Length < 6)
+        {
+            return BadRequest("New password must be at least 6 characters long.");
+        }
+
+        var patientId = GetUserId();
+        var success = await _analysisService.ChangePasswordAsync(patientId, request, cancellationToken);
+
+        if (!success)
+        {
+            return BadRequest("Current password is incorrect.");
+        }
+
+        return Ok(new { message = "Password changed successfully." });
+    }
+
+    [HttpGet("reports/{reportType}")]
+    public async Task<IActionResult> DownloadReport(string reportType, CancellationToken cancellationToken)
+    {
+        var patientId = GetUserId();
+        var reportBytes = await _analysisService.GenerateReportAsync(patientId, reportType, cancellationToken);
+
+        if (reportBytes == null || reportBytes.Length == 0)
+        {
+            return NotFound("Report not found or could not be generated.");
+        }
+
+        var fileName = $"{reportType}_{DateTime.UtcNow:yyyyMMdd}.pdf";
+        return File(reportBytes, "application/pdf", fileName);
+    }
+
     private Guid GetUserId()
     {
         var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);

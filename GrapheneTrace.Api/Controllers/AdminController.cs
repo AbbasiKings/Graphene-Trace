@@ -128,6 +128,32 @@ public class AdminController(IAdminService adminService, IAuthService authServic
     public async Task<IActionResult> GetSystemAudit([FromQuery] int limit = 100, CancellationToken cancellationToken = default)
         => Ok(await _adminService.GetSystemAuditLogsAsync(limit, cancellationToken));
 
+    [HttpGet("configuration")]
+    public async Task<IActionResult> GetSystemConfiguration(CancellationToken cancellationToken)
+        => Ok(await _adminService.GetSystemConfigurationAsync(cancellationToken));
+
+    [HttpPut("configuration")]
+    public async Task<IActionResult> UpdateSystemConfiguration([FromBody] UpdateConfigurationDto config, CancellationToken cancellationToken)
+    {
+        var result = await _adminService.UpdateSystemConfigurationAsync(config, cancellationToken);
+        if (!result)
+        {
+            return BadRequest("Failed to update configuration.");
+        }
+
+        // Log the action
+        var adminUserId = GetUserId();
+        await _auditService.LogActionAsync(
+            adminUserId,
+            "ConfigurationUpdated",
+            "System",
+            Guid.Empty,
+            "{\"type\":\"system_configuration\"}",
+            cancellationToken);
+
+        return Ok(new { message = "Configuration updated successfully." });
+    }
+
     private Guid GetUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value

@@ -60,6 +60,26 @@
                                   Disabled="true" />
                 }
 
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudDatePicker @bind-Date="FormModel.DateOfBirth"
+                                       Label="Date of Birth"
+                                       Variant="Variant.Outlined"
+                                       DateFormat="yyyy-MM-dd"
+                                       MaxDate="@DateTime.Today" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField T="string" @bind-Value="FormModel.PhoneNumber"
+                                      Label="Phone Number"
+                                      Variant="Variant.Outlined" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudTextField T="string" @bind-Value="FormModel.Address"
+                              Label="Address"
+                              Variant="Variant.Outlined"
+                              Lines="2" />
+
                 @if (FormModel.IsNew)
                 {
                     <MudTextField T="string" @bind-Value="FormModel.Password"
