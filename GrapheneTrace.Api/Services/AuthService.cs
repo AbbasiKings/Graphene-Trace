@@ -133,6 +133,7 @@ public class AuthService(AppDbContext dbContext, ILogger<AuthService> logger, IC
     {
         var users = await _dbContext.Users
             .Include(u => u.AssignedClinician)
+            .Where(u => u.DeletedAt == null) // Filter out deleted users
             .OrderBy(u => u.FullName)
             .ToListAsync(cancellationToken);
 

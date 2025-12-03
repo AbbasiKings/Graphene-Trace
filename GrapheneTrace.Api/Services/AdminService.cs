@@ -88,6 +88,7 @@ public class AdminService(AppDbContext dbContext, IAuditService auditService) : 
     {
         var users = await _dbContext.Users
             .Include(u => u.AssignedClinician)
+            .Where(u => u.DeletedAt == null) // Filter out deleted users
             .OrderBy(u => u.FullName)
             .ToListAsync(cancellationToken);
 
@@ -198,8 +199,9 @@ public class AdminService(AppDbContext dbContext, IAuditService auditService) : 
 
         if (hasPatientData || hasAlerts || hasComments || hasAssignedPatients)
         {
-            // Soft delete: deactivate instead of hard delete
+            // Soft delete: deactivate and mark as deleted
             user.IsActive = false;
+            user.DeletedAt = DateTime.UtcNow;
             user.UpdatedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
 

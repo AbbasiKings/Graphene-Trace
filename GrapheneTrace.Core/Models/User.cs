@@ -20,5 +20,6 @@ public class User : BaseEntity
     public DateTime? DateOfBirth { get; set; }
     public string? PhoneNumber { get; set; }
     public string? Address { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
