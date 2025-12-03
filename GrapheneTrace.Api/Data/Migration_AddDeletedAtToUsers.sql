@@ -10,3 +10,4 @@ ADD COLUMN `DeletedAt` DATETIME NULL AFTER `Address`;
 -- ALTER TABLE [Users]
 -- ADD [DeletedAt] DATETIME2 NULL;
 
+

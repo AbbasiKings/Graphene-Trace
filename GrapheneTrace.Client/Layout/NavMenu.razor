@@ -30,62 +30,7 @@
                 </NavLink>
             </div>
         }
-        else if (Role == UserRole.Clinician)
-        {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/clinician/dashboard" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Size="Size.Small" Class="me-2" /> Triage Dashboard
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/clinician/patients" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Size="Size.Small" Class="me-2" /> Patient Directory
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/clinician/patient-analysis" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.Insights" Size="Size.Small" Class="me-2" /> Patient Analysis
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/clinician/alerts" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Size="Size.Small" Class="me-2" /> Alerts & Events
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/clinician/messaging" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Class="me-2" /> Communication
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/clinician/reports" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.Assessment" Size="Size.Small" Class="me-2" /> Reporting & Exports
-                </NavLink>
-            </div>
-        }
-        else if (Role == UserRole.Patient)
-        {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/patient/dashboard" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Small" Class="me-2" /> Patient Dashboard
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/patient/trends" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.ShowChart" Size="Size.Small" Class="me-2" /> Data Trends
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/patient/alerts" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.Campaign" Size="Size.Small" Class="me-2" /> Alerts & Communication
-                </NavLink>
-            </div>
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/patient/profile" Match="NavLinkMatch.Prefix">
-                    <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Class="me-2" /> Profile & Settings
-                </NavLink>
-            </div>
-        }
+        @* Clinician and Patient navigation removed for now; only Admin panel is active. *@
     </nav>
 </div>
 
